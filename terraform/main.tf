@@ -6,6 +6,13 @@ terraform {
       version = "~> 3.116"
     }
   }
+
+  backend "azurerm" {
+    # Backend configuration provided via environment variables:
+    # ARM_BACKEND_RESOURCE_GROUP, ARM_BACKEND_STORAGE_ACCOUNT,
+    # ARM_BACKEND_CONTAINER, ARM_BACKEND_KEY
+    # This eliminates hardcoded duplication across files
+  }
 }
 
 provider "azurerm" {
@@ -32,7 +39,7 @@ resource "azurerm_container_registry" "acr" {
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   sku                 = "Basic"
-  admin_enabled       = false  # Security: use managed identity
+  admin_enabled       = false
 
   tags = local.common_tags
 }

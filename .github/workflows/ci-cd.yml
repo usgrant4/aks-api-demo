@@ -1,162 +1,457 @@
+---
 name: ci-cd
 
-on:
-    push:
-        branches: [main]
-        paths:
-            - "app/**"
-            - "Dockerfile"
-            - "kubernetes/**"
-            - "terraform/**"
-            - ".github/workflows/ci-cd.yml"
-    pull_request:
-        paths:
-            - "app/**"
-            - "Dockerfile"
-            - "kubernetes/**"
-            - "terraform/**"
+"on":
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "Dockerfile"
+      - "kubernetes/**"
+      - "terraform/**"
+      - ".github/workflows/ci-cd.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "Dockerfile"
+      - "kubernetes/**"
+      - "terraform/**"
 
 env:
-    TF_WORKING_DIR: terraform
-    APP_NAME: liatrio-demo
+  TF_WORKING_DIR: terraform
+  APP_NAME: liatrio-demo
+  # Centralized backend configuration
+  TF_BACKEND_RG: tfstate-rg
+  TF_BACKEND_SA: tfstateugrantliatrio
+  TF_BACKEND_CONTAINER: tfstate
+  TF_BACKEND_KEY: liatrio-demo.tfstate
+  TF_BACKEND_LOCATION: westus2
 
 jobs:
-    build-test:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-            - name: Set up Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-                  cache: "pip"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
 
-            - name: Install deps & run tests
-              run: |
-                  pip install -r app/requirements.txt
-                  pytest -v --tb=short
+      - name: Install deps & run tests
+        run: |
+          pip install -r app/requirements.txt
+          pytest -v --tb=short
 
-    deploy:
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        needs: build-test
-        runs-on: ubuntu-latest
-        permissions:
-            id-token: write
-            contents: read
-        steps:
-            - uses: actions/checkout@v4
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build-test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-deployment
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
 
-            - name: Azure login (OIDC)
-              uses: azure/login@v2
-              with:
-                  client-id: ${{ secrets.AZURE_CLIENT_ID }}
-                  tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-                  subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-            - name: Setup Terraform
-              uses: hashicorp/setup-terraform@v3
-              with:
-                  terraform_version: 1.9.6
-                  terraform_wrapper: false
+      - name: Setup Terraform backend
+        env:
+          RESOURCE_GROUP_NAME: ${{ env.TF_BACKEND_RG }}
+          STORAGE_ACCOUNT_NAME: ${{ env.TF_BACKEND_SA }}
+          CONTAINER_NAME: ${{ env.TF_BACKEND_CONTAINER }}
+          LOCATION: ${{ env.TF_BACKEND_LOCATION }}
+        run: |
+          set -e
+          set -o pipefail
 
-            - name: Terraform Init/Apply
-              working-directory: ${{ env.TF_WORKING_DIR }}
-              run: |
-                  terraform init -input=false
-                  terraform apply -auto-approve -input=false -compact-warnings
+          echo "Ensuring Terraform backend exists..."
 
-            - name: Fetch outputs
-              id: tfout
-              working-directory: ${{ env.TF_WORKING_DIR }}
-              run: |
-                  echo "ACR_LOGIN_SERVER=$(terraform output -raw acr_login_server)" >> $GITHUB_OUTPUT
-                  echo "ACR_NAME=$(terraform output -raw acr_login_server | cut -d'.' -f1)" >> $GITHUB_OUTPUT
-                  echo "RG=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
-                  echo "AKS=$(terraform output -raw aks_name)" >> $GITHUB_OUTPUT
+          # Create resource group if it doesn't exist
+          if ! az group show --name $RESOURCE_GROUP_NAME &>/dev/null; then
+            echo "Creating resource group: $RESOURCE_GROUP_NAME"
+            if ! az group create \
+                --name $RESOURCE_GROUP_NAME \
+                --location $LOCATION \
+                --tags "purpose=terraform-state" "managed_by=github-actions"; then
+              echo "ERROR: Failed to create resource group"
+              exit 1
+            fi
+            echo "✓ Resource group created"
+          else
+            echo "✓ Resource group exists: $RESOURCE_GROUP_NAME"
+          fi
 
-            - name: AKS get-credentials
-              run: |
-                  az aks get-credentials \
-                    -g ${{ steps.tfout.outputs.RG }} \
-                    -n ${{ steps.tfout.outputs.AKS }} \
-                    --overwrite-existing
+          # Create storage account if it doesn't exist
+          STORAGE_CREATED=false
+          if ! az storage account show --name $STORAGE_ACCOUNT_NAME --resource-group $RESOURCE_GROUP_NAME &>/dev/null; then
+            echo "Creating storage account: $STORAGE_ACCOUNT_NAME"
+            if ! az storage account create \
+                --name $STORAGE_ACCOUNT_NAME \
+                --resource-group $RESOURCE_GROUP_NAME \
+                --location $LOCATION \
+                --sku Standard_LRS \
+                --encryption-services blob \
+                --https-only true \
+                --min-tls-version TLS1_2 \
+                --allow-blob-public-access false; then
+              echo "ERROR: Failed to create storage account"
+              exit 1
+            fi
+            STORAGE_CREATED=true
+            echo "✓ Storage account created"
+          else
+            echo "✓ Storage account exists: $STORAGE_ACCOUNT_NAME"
+          fi
 
-            - name: ACR login
-              run: az acr login --name ${{ steps.tfout.outputs.ACR_NAME }}
+          # Wait for storage account to be fully provisioned
+          if [ "$STORAGE_CREATED" = true ]; then
+            echo "Waiting for storage account to be fully ready..."
+            for i in {1..30}; do
+              PROVISIONING_STATE=$(az storage account show \
+                --name $STORAGE_ACCOUNT_NAME \
+                --resource-group $RESOURCE_GROUP_NAME \
+                --query "provisioningState" -o tsv 2>/dev/null || echo "Unknown")
 
-            - name: Set up Docker Buildx
-              uses: docker/setup-buildx-action@v3
+              if [ "$PROVISIONING_STATE" = "Succeeded" ]; then
+                echo "✓ Storage account provisioning complete"
+                break
+              fi
+              echo "Waiting for provisioning... ($i/30) State: $PROVISIONING_STATE"
+              sleep 2
+            done
 
-            - name: Build & push image
-              uses: docker/build-push-action@v5
-              with:
-                  context: .
-                  push: true
-                  tags: |
-                      ${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ github.sha }}
-                      ${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:latest
-                  cache-from: type=registry,ref=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:buildcache
-                  cache-to: type=registry,ref=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:buildcache,mode=max
+            # Additional wait for backend availability
+            echo "Waiting 5s for backend stabilization..."
+            sleep 5
+          fi
 
-            - name: Deploy manifests
-              run: |
-                  sed "s#REPLACE_WITH_ACR_LOGIN#${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}#" \
-                    kubernetes/deployment.yaml | kubectl apply -f -
+          # Create blob container if it doesn't exist
+          if ! az storage container show \
+              --name $CONTAINER_NAME \
+              --account-name $STORAGE_ACCOUNT_NAME \
+              --auth-mode login &>/dev/null; then
+            echo "Creating blob container: $CONTAINER_NAME"
+            if ! az storage container create \
+                --name $CONTAINER_NAME \
+                --account-name $STORAGE_ACCOUNT_NAME \
+                --auth-mode login; then
+              echo "ERROR: Failed to create blob container"
+              exit 1
+            fi
+            echo "✓ Blob container created"
+          else
+            echo "✓ Blob container exists: $CONTAINER_NAME"
+          fi
 
-            - name: Wait for rollout
-              run: kubectl rollout status deploy/liatrio-demo --timeout=120s
+          # Validate access to the backend
+          echo "Validating backend access..."
+          if ! az storage blob list \
+              --container-name $CONTAINER_NAME \
+              --account-name $STORAGE_ACCOUNT_NAME \
+              --auth-mode login \
+              --num-results 1 &>/dev/null; then
+            echo "ERROR: Cannot access storage container. Checking permissions..."
 
-            - name: Smoke test
-              run: |
-                  echo "Waiting for LoadBalancer IP allocation..."
-                  for i in $(seq 1 20); do
-                    IP=$(kubectl get svc liatrio-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-                    if [ -n "$IP" ]; then
-                      echo "✓ Service IP acquired: $IP"
-                      echo "Testing endpoint..."
-                      if curl -sS -f http://$IP/ --connect-timeout 5 --retry 3 --retry-delay 2; then
-                        echo ""
-                        echo "✓ Smoke test PASSED"
-                        exit 0
-                      else
-                        echo "✗ Endpoint returned error"
-                        kubectl get pods -l app=liatrio-demo
-                        kubectl logs -l app=liatrio-demo --tail=20
-                        exit 1
-                      fi
-                    fi
-                    echo "⏳ Waiting for external IP... (attempt $i/20)"
-                    sleep 10
-                  done
-                  echo "✗ Smoke test FAILED: LoadBalancer IP not available after 200s"
-                  kubectl get svc liatrio-demo-svc -o yaml
-                  kubectl describe svc liatrio-demo-svc
-                  exit 1
+            # Get current identity
+            CURRENT_USER=$(az account show --query user.name -o tsv)
+            echo "Current identity: $CURRENT_USER"
 
-    destroy:
-        if: github.event_name == 'workflow_dispatch'
-        runs-on: ubuntu-latest
-        permissions:
-            id-token: write
-            contents: read
-        steps:
-            - uses: actions/checkout@v4
+            # Try to grant permission
+            echo "Attempting to grant Storage Blob Data Contributor role..."
+            SCOPE="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME"
 
-            - name: Azure login (OIDC)
-              uses: azure/login@v2
-              with:
-                  client-id: ${{ secrets.AZURE_CLIENT_ID }}
-                  tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-                  subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+            if az role assignment create \
+                --assignee $CURRENT_USER \
+                --role "Storage Blob Data Contributor" \
+                --scope "$SCOPE" 2>/dev/null; then
+              echo "✓ Role assignment created"
+              sleep 10
 
-            - name: Setup Terraform
-              uses: hashicorp/setup-terraform@v3
-              with:
-                  terraform_version: 1.9.6
+              # Verify again
+              if ! az storage blob list \
+                  --container-name $CONTAINER_NAME \
+                  --account-name $STORAGE_ACCOUNT_NAME \
+                  --auth-mode login \
+                  --num-results 1 &>/dev/null; then
+                echo "ERROR: Still cannot access storage after role assignment"
+                exit 1
+              fi
+            else
+              echo "WARNING: Could not auto-grant permissions"
+              echo "Please ensure service principal has 'Storage Blob Data Contributor' role"
+              exit 1
+            fi
+          fi
 
-            - name: Terraform Destroy
-              working-directory: terraform
-              run: |
-                  terraform init -input=false
-                  terraform destroy -auto-approve -input=false
+          echo "✓ Backend access validated"
+          echo "✓ Terraform backend ready"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.6
+          terraform_wrapper: false
+
+      - name: Terraform Init/Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          ARM_BACKEND_RESOURCE_GROUP: ${{ env.TF_BACKEND_RG }}
+          ARM_BACKEND_STORAGE_ACCOUNT: ${{ env.TF_BACKEND_SA }}
+          ARM_BACKEND_CONTAINER: ${{ env.TF_BACKEND_CONTAINER }}
+          ARM_BACKEND_KEY: ${{ env.TF_BACKEND_KEY }}
+        run: |
+          # Backend configuration provided via environment variables
+          terraform init \
+            -backend-config="resource_group_name=$ARM_BACKEND_RESOURCE_GROUP" \
+            -backend-config="storage_account_name=$ARM_BACKEND_STORAGE_ACCOUNT" \
+            -backend-config="container_name=$ARM_BACKEND_CONTAINER" \
+            -backend-config="key=$ARM_BACKEND_KEY" \
+            -input=false
+          terraform apply -auto-approve -input=false
+
+      - name: Fetch outputs
+        id: tfout
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          ACR=$(terraform output -raw acr_login_server)
+          echo "ACR_LOGIN_SERVER=$ACR" >> $GITHUB_OUTPUT
+          ACR_NAME=$(echo $ACR | cut -d'.' -f1)
+          echo "ACR_NAME=$ACR_NAME" >> $GITHUB_OUTPUT
+          RG=$(terraform output -raw resource_group_name)
+          echo "RG=$RG" >> $GITHUB_OUTPUT
+          AKS=$(terraform output -raw aks_name)
+          echo "AKS=$AKS" >> $GITHUB_OUTPUT
+
+      - name: AKS get-credentials
+        run: |
+          retry() {
+            local max_attempts=3
+            local delay=5
+            local attempt=1
+
+            while [ $attempt -le $max_attempts ]; do
+              if "$@"; then
+                return 0
+              fi
+              echo "Attempt $attempt failed. Retrying in ${delay}s..."
+              sleep $delay
+              ((attempt++))
+            done
+
+            echo "Failed after $max_attempts attempts"
+            return 1
+          }
+
+          retry az aks get-credentials \
+            -g ${{ steps.tfout.outputs.RG }} \
+            -n ${{ steps.tfout.outputs.AKS }} \
+            --overwrite-existing
+
+      - name: Build & push image with ACR build
+        id: acr_build
+        run: |
+          VERSION="v1.0.${{ github.sha }}"
+          echo "Building version: $VERSION"
+
+          az acr build \
+            --registry ${{ steps.tfout.outputs.ACR_NAME }} \
+            --image "${{ env.APP_NAME }}:$VERSION" \
+            --image "${{ env.APP_NAME }}:latest" \
+            --platform linux/amd64 \
+            --file Dockerfile \
+            . \
+            --output table
+
+          echo "IMAGE_TAG=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Verify image manifest
+        run: |
+          echo "Verifying image platform..."
+          MANIFEST=$(az acr manifest show \
+            --name "${{ env.APP_NAME }}:${{ steps.acr_build.outputs.IMAGE_TAG }}" \
+            --registry ${{ steps.tfout.outputs.ACR_NAME }} \
+            -o json)
+
+          echo "$MANIFEST" | jq -r '.manifests[]? | "\(.platform.os)/\(.platform.architecture)"'
+
+          # Check for unknown/unknown platforms
+          UNKNOWN_COUNT=$(echo "$MANIFEST" | jq '[.manifests[]? | select(.platform.os == "unknown")] | length')
+          if [ "$UNKNOWN_COUNT" != "0" ]; then
+            echo "⚠️ Warning: Found $UNKNOWN_COUNT unknown platform manifests"
+          else
+            echo "✅ Clean manifest - all platforms valid"
+          fi
+
+      - name: Save current deployment for rollback
+        id: save_deployment
+        continue-on-error: true
+        run: |
+          if kubectl get deployment liatrio-demo &>/dev/null; then
+            echo "Saving current deployment state..."
+            kubectl get deployment liatrio-demo -o yaml > /tmp/previous-deployment.yaml
+            echo "PREVIOUS_DEPLOYMENT_EXISTS=true" >> $GITHUB_OUTPUT
+
+            # Check current health
+            READY=$(kubectl get deploy liatrio-demo -o jsonpath='{.status.readyReplicas}' || echo "0")
+            DESIRED=$(kubectl get deploy liatrio-demo -o jsonpath='{.spec.replicas}' || echo "0")
+
+            if [ "$READY" != "$DESIRED" ]; then
+              echo "WARNING: Current deployment is unhealthy ($READY/$DESIRED ready)"
+              kubectl get pods -l app=liatrio-demo
+            else
+              echo "✓ Current deployment is healthy ($READY/$DESIRED ready)"
+            fi
+          else
+            echo "No existing deployment found (initial deployment)"
+            echo "PREVIOUS_DEPLOYMENT_EXISTS=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy manifests
+        id: deploy
+        run: |
+          ACR=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}
+          IMAGE_TAG=${{ steps.acr_build.outputs.IMAGE_TAG }}
+
+          # Use versioned tag for deployment
+          sed "s#REPLACE_WITH_ACR_LOGIN/liatrio-demo:latest#$ACR/${{ env.APP_NAME }}:$IMAGE_TAG#" \
+            kubernetes/deployment.yaml | kubectl apply -f -
+
+      - name: Wait for rollout
+        id: rollout
+        run: |
+          echo "Waiting for deployment rollout..."
+          if ! kubectl rollout status deploy/liatrio-demo --timeout=300s; then
+            echo "ERROR: Deployment rollout failed"
+
+            # Attempt rollback if previous deployment exists
+            if [ -f /tmp/previous-deployment.yaml ]; then
+              echo "Attempting to rollback to previous deployment..."
+              kubectl apply -f /tmp/previous-deployment.yaml
+              echo "Waiting for rollback to complete..."
+              kubectl rollout status deploy/liatrio-demo --timeout=120s || true
+            fi
+
+            exit 1
+          fi
+          echo "✓ Deployment rollout completed successfully"
+
+      - name: Verify pod readiness
+        run: |
+          echo "Verifying all pods are ready..."
+
+          # Get replica count from deployment
+          DESIRED=$(kubectl get deploy liatrio-demo -o jsonpath='{.spec.replicas}')
+          READY=$(kubectl get deploy liatrio-demo -o jsonpath='{.status.readyReplicas}')
+
+          if [ "$READY" != "$DESIRED" ]; then
+            echo "ERROR: Expected $DESIRED ready pods, got $READY"
+            kubectl get pods -l app=liatrio-demo
+            kubectl describe pods -l app=liatrio-demo
+            kubectl logs -l app=liatrio-demo --tail=50
+            exit 1
+          fi
+
+          echo "✓ All $READY/$DESIRED pods ready"
+          kubectl get pods -l app=liatrio-demo
+
+      - name: Smoke test
+        run: |
+          echo "Waiting for LoadBalancer IP..."
+          for i in $(seq 1 30); do
+            SVC="liatrio-demo-svc"
+            IP=$(kubectl get svc $SVC \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+            if [ -n "$IP" ]; then
+              echo "✅ Service IP assigned: $IP"
+              echo "Waiting 5s for service to be ready..."
+              sleep 5
+
+              if curl -sS -f http://$IP/ \
+                  --connect-timeout 10 \
+                  --retry 3 \
+                  --retry-delay 2; then
+                echo ""
+                echo "=========================================="
+                echo "  ✅ DEPLOYMENT SUCCESSFUL!"
+                echo "=========================================="
+                echo ""
+                echo "API Endpoint: http://$IP/"
+                echo "Health Check: http://$IP/health"
+                echo "Version: v1.0.${{ github.sha }}"
+                exit 0
+              else
+                echo "⚠️ API not responding"
+                kubectl get pods -l app=liatrio-demo
+                kubectl logs -l app=liatrio-demo --tail=20
+                exit 1
+              fi
+            fi
+            echo "⏳ Waiting for IP (attempt $i/30)..."
+            sleep 10
+          done
+          echo "✗ LoadBalancer IP not assigned"
+          kubectl describe svc liatrio-demo-svc
+          exit 1
+
+  destroy:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-deployment
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.6
+          terraform_wrapper: false
+
+      - name: Terraform Destroy
+        working-directory: terraform
+        env:
+          ARM_BACKEND_RESOURCE_GROUP: ${{ env.TF_BACKEND_RG }}
+          ARM_BACKEND_STORAGE_ACCOUNT: ${{ env.TF_BACKEND_SA }}
+          ARM_BACKEND_CONTAINER: ${{ env.TF_BACKEND_CONTAINER }}
+          ARM_BACKEND_KEY: ${{ env.TF_BACKEND_KEY }}
+        run: |
+          # Try to init with backend, if it fails, init without backend
+          if ! terraform init \
+              -backend-config="resource_group_name=$ARM_BACKEND_RESOURCE_GROUP" \
+              -backend-config="storage_account_name=$ARM_BACKEND_STORAGE_ACCOUNT" \
+              -backend-config="container_name=$ARM_BACKEND_CONTAINER" \
+              -backend-config="key=$ARM_BACKEND_KEY" \
+              -input=false 2>/dev/null; then
+            echo "Backend not accessible, attempting init without backend..."
+            if ! terraform init -backend=false -input=false; then
+              echo "ERROR: Failed to initialize Terraform"
+              exit 1
+            fi
+            echo "WARNING: Using local state - backend not available"
+          else
+            echo "✓ Initialized with remote backend"
+          fi
+
+          # Proceed with destroy
+          terraform destroy -auto-approve -input=false
