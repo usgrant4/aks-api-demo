@@ -16,6 +16,24 @@ name: ci-cd
       - "Dockerfile"
       - "kubernetes/**"
       - "terraform/**"
+  workflow_dispatch:
+    inputs:
+      destroy:
+        description: 'Destroy infrastructure (true/false)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      environment:
+        description: 'Environment to destroy (dev/prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - 'dev'
+          - 'prod'
 
 env:
   TF_WORKING_DIR: terraform
@@ -28,6 +46,7 @@ env:
 
 jobs:
   build-test:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.destroy != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,11 +63,15 @@ jobs:
           pytest -v --tb=short
 
   deploy:
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && github.event_name == 'push'
-    needs: build-test
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
+      (github.event_name == 'workflow_dispatch')
+    # build-test will be skipped when manually destroying (destroy=true)
+    # but deploy still needs it for push/PR events
+    needs: [build-test]
     runs-on: ubuntu-latest
     concurrency:
-      group: ${{ github.ref == 'refs/heads/main' && 'production-deployment' || 'dev-deployment' }}
+      group: ${{ github.event_name == 'workflow_dispatch' && format('{0}-deployment', github.event.inputs.environment) || (github.ref == 'refs/heads/main' && 'prod-deployment' || 'dev-deployment') }}
       cancel-in-progress: false
     permissions:
       id-token: write
@@ -59,16 +82,30 @@ jobs:
       - name: Set environment variables
         id: set_env
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "ENVIRONMENT=prod" >> $GITHUB_ENV
-            echo "TF_BACKEND_KEY=liatrio-demo-prod.tfstate" >> $GITHUB_ENV
-            echo "DEPLOY_ENV=prod" >> $GITHUB_OUTPUT
+          # Handle manual workflow dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+            DESTROY="${{ github.event.inputs.destroy }}"
+            echo "DESTROY_MODE=$DESTROY" >> $GITHUB_ENV
           else
-            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
-            echo "TF_BACKEND_KEY=liatrio-demo-dev.tfstate" >> $GITHUB_ENV
-            echo "DEPLOY_ENV=dev" >> $GITHUB_OUTPUT
+            # Handle push events
+            if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+              ENV="prod"
+            else
+              ENV="dev"
+            fi
+            echo "DESTROY_MODE=false" >> $GITHUB_ENV
           fi
-          echo "Deploying to environment: $(echo $ENVIRONMENT)"
+
+          echo "ENVIRONMENT=$ENV" >> $GITHUB_ENV
+          echo "TF_BACKEND_KEY=liatrio-demo-$ENV.tfstate" >> $GITHUB_ENV
+          echo "DEPLOY_ENV=$ENV" >> $GITHUB_OUTPUT
+
+          if [ "$DESTROY_MODE" = "true" ]; then
+            echo "⚠️  DESTROY MODE: Will destroy $ENV environment"
+          else
+            echo "Deploying to environment: $ENV"
+          fi
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -215,7 +252,7 @@ jobs:
           terraform_version: 1.9.6
           terraform_wrapper: false
 
-      - name: Terraform Init/Apply
+      - name: Terraform Init/Apply/Destroy
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -238,10 +275,19 @@ jobs:
             -backend-config="use_oidc=true" \
             -input=false
 
-          echo "Deploying to environment: ${{ env.ENVIRONMENT }}"
-          terraform apply -auto-approve -input=false
+          if [ "${{ env.DESTROY_MODE }}" = "true" ]; then
+            echo "⚠️  DESTROYING infrastructure for environment: ${{ env.ENVIRONMENT }}"
+            echo "⚠️  This action is irreversible!"
+            terraform destroy -auto-approve -input=false
+            echo "✓ Infrastructure destroyed successfully"
+          else
+            echo "Deploying to environment: ${{ env.ENVIRONMENT }}"
+            terraform apply -auto-approve -input=false
+            echo "✓ Infrastructure deployed successfully"
+          fi
 
       - name: Fetch outputs
+        if: env.DESTROY_MODE != 'true'
         id: tfout
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
@@ -261,6 +307,7 @@ jobs:
           echo "AKS=$AKS" >> $GITHUB_OUTPUT
 
       - name: AKS get-credentials
+        if: env.DESTROY_MODE != 'true'
         run: |
           retry() {
             local max_attempts=3
@@ -286,6 +333,7 @@ jobs:
             --overwrite-existing
 
       - name: Build & push image with ACR build
+        if: env.DESTROY_MODE != 'true'
         id: acr_build
         run: |
           VERSION="v1.0.${{ github.sha }}"
@@ -303,6 +351,7 @@ jobs:
           echo "IMAGE_TAG=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Verify image manifest
+        if: env.DESTROY_MODE != 'true'
         run: |
           echo "Verifying image platform..."
           MANIFEST=$(az acr manifest show \
@@ -321,6 +370,7 @@ jobs:
           fi
 
       - name: Save current deployment for rollback
+        if: env.DESTROY_MODE != 'true'
         id: save_deployment
         continue-on-error: true
         run: |
@@ -345,6 +395,7 @@ jobs:
           fi
 
       - name: Deploy manifests
+        if: env.DESTROY_MODE != 'true'
         id: deploy
         run: |
           ACR=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}
@@ -355,6 +406,7 @@ jobs:
             kubernetes/deployment.yaml | kubectl apply -f -
 
       - name: Wait for rollout
+        if: env.DESTROY_MODE != 'true'
         id: rollout
         run: |
           echo "Waiting for deployment rollout..."
@@ -374,6 +426,7 @@ jobs:
           echo "✓ Deployment rollout completed successfully"
 
       - name: Verify pod readiness
+        if: env.DESTROY_MODE != 'true'
         run: |
           echo "Verifying all pods are ready..."
 
@@ -393,6 +446,7 @@ jobs:
           kubectl get pods -l app=liatrio-demo
 
       - name: Smoke test
+        if: env.DESTROY_MODE != 'true'
         run: |
           echo "Waiting for LoadBalancer IP..."
           for i in $(seq 1 30); do
@@ -430,61 +484,3 @@ jobs:
           echo "✗ LoadBalancer IP not assigned"
           kubectl describe svc liatrio-demo-svc
           exit 1
-
-  destroy:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: production-deployment
-      cancel-in-progress: false
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.6
-          terraform_wrapper: false
-
-      - name: Terraform Destroy
-        working-directory: terraform
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_USE_OIDC: true
-          ARM_BACKEND_RESOURCE_GROUP: ${{ env.TF_BACKEND_RG }}
-          ARM_BACKEND_STORAGE_ACCOUNT: ${{ env.TF_BACKEND_SA }}
-          ARM_BACKEND_CONTAINER: ${{ env.TF_BACKEND_CONTAINER }}
-          ARM_BACKEND_KEY: ${{ env.TF_BACKEND_KEY }}
-        run: |
-          # Try to init with backend, if it fails, init without backend
-          if ! terraform init \
-              -backend-config="resource_group_name=$ARM_BACKEND_RESOURCE_GROUP" \
-              -backend-config="storage_account_name=$ARM_BACKEND_STORAGE_ACCOUNT" \
-              -backend-config="container_name=$ARM_BACKEND_CONTAINER" \
-              -backend-config="key=$ARM_BACKEND_KEY" \
-              -backend-config="use_oidc=true" \
-              -input=false 2>/dev/null; then
-            echo "Backend not accessible, attempting init without backend..."
-            if ! terraform init -backend=false -input=false; then
-              echo "ERROR: Failed to initialize Terraform"
-              exit 1
-            fi
-            echo "WARNING: Using local state - backend not available"
-          else
-            echo "✓ Initialized with remote backend"
-          fi
-
-          # Proceed with destroy
-          terraform destroy -auto-approve -input=false
