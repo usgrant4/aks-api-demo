@@ -20,11 +20,15 @@ provider "azurerm" {
 }
 
 locals {
-  name = "${var.prefix}-liatrio-demo"
+  # Include environment in resource naming
+  name = "${var.prefix}-liatrio-demo-${var.environment}"
+
+  # Common tags with environment
   common_tags = {
     project     = "liatrio-devops-demo"
     managed_by  = "terraform"
-    environment = "demo"
+    environment = var.environment
+    deployed_by = "github-actions"
   }
 }
 
@@ -35,7 +39,8 @@ resource "azurerm_resource_group" "rg" {
 }
 
 resource "azurerm_container_registry" "acr" {
-  name                = replace("${local.name}acr", "-", "")
+  # ACR names can't have hyphens, so format: prefixliatriodemoenvacr
+  name                = replace("${var.prefix}liatriodemo${var.environment}acr", "-", "")
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   sku                 = "Basic"

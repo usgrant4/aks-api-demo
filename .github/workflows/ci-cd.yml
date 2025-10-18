@@ -226,6 +226,7 @@ jobs:
           ARM_BACKEND_STORAGE_ACCOUNT: ${{ env.TF_BACKEND_SA }}
           ARM_BACKEND_CONTAINER: ${{ env.TF_BACKEND_CONTAINER }}
           ARM_BACKEND_KEY: ${{ env.TF_BACKEND_KEY }}
+          TF_VAR_environment: ${{ env.ENVIRONMENT }}
         run: |
           # Backend configuration provided via environment variables
           # Terraform will use OIDC authentication via ARM_USE_OIDC=true
@@ -236,6 +237,8 @@ jobs:
             -backend-config="key=$ARM_BACKEND_KEY" \
             -backend-config="use_oidc=true" \
             -input=false
+
+          echo "Deploying to environment: ${{ env.ENVIRONMENT }}"
           terraform apply -auto-approve -input=false
 
       - name: Fetch outputs
@@ -246,6 +249,7 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           ARM_USE_OIDC: true
+          TF_VAR_environment: ${{ env.ENVIRONMENT }}
         run: |
           ACR=$(terraform output -raw acr_login_server)
           echo "ACR_LOGIN_SERVER=$ACR" >> $GITHUB_OUTPUT
