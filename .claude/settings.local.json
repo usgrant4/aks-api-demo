@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(python -c \"import yaml; yaml.safe_load(open(''.github/workflows/ci-cd.yml'')); print(''✓ YAML syntax is valid'')\")",
-      "Bash(python -c \"import yaml; yaml.safe_load(open(''.github/workflows/ci-cd.yml'', encoding=''utf-8'')); print(''✓ YAML syntax is valid'')\")"
+      "Bash(python -c \"import yaml; yaml.safe_load(open(''.github/workflows/ci-cd.yml'', encoding=''utf-8'')); print(''✓ YAML syntax is valid'')\")",
+      "Bash(terraform show -json)",
+      "Bash(python -c \"import sys, json; data = json.load(sys.stdin); resources = data.get(''''values'''', {}).get(''''root_module'''', {}).get(''''resources'''', []); [print(f\"\"{r[''''type'''']}.{r[''''name'''']}: {r[''''values''''].get(''''name'''', ''''N/A'''')}\"\") for r in resources]\")",
+      "Bash(terraform state list)",
+      "Bash(terraform destroy -auto-approve)"
     ],
     "deny": [],
     "ask": []
