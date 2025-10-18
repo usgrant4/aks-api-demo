@@ -1,7 +1,7 @@
 ---
 name: ci-cd
 
-"on":
+on:
   push:
     branches: [main, dev] # Added dev branch for testing
     paths:
@@ -19,21 +19,21 @@ name: ci-cd
   workflow_dispatch:
     inputs:
       destroy:
-        description: 'Destroy infrastructure (true/false)'
+        description: "Destroy infrastructure (true/false)"
         required: true
-        default: 'false'
+        default: "false"
         type: choice
         options:
-          - 'false'
-          - 'true'
+          - "false"
+          - "true"
       environment:
-        description: 'Environment to destroy (dev/prod)'
+        description: "Environment to destroy (dev/prod)"
         required: true
-        default: 'dev'
+        default: "dev"
         type: choice
         options:
-          - 'dev'
-          - 'prod'
+          - "dev"
+          - "prod"
 
 env:
   TF_WORKING_DIR: terraform
