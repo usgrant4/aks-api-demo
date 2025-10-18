@@ -143,9 +143,23 @@ jobs:
               sleep 2
             done
 
-            # Additional wait for backend availability
-            echo "Waiting 5s for backend stabilization..."
-            sleep 5
+            # Grant Storage Blob Data Contributor permission to service principal
+            echo "Granting Storage Blob Data Contributor role to service principal..."
+            SP_CLIENT_ID="${{ secrets.AZURE_CLIENT_ID }}"
+            STORAGE_SCOPE="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME"
+
+            if az role assignment create \
+                --assignee $SP_CLIENT_ID \
+                --role "Storage Blob Data Contributor" \
+                --scope "$STORAGE_SCOPE" 2>/dev/null; then
+              echo "✓ Storage Blob Data Contributor role granted"
+            else
+              echo "ℹ Role assignment may already exist or permissions already granted"
+            fi
+
+            # Additional wait for backend availability and role propagation
+            echo "Waiting 10s for backend stabilization and role propagation..."
+            sleep 10
           fi
 
           # Create blob container if it doesn't exist
@@ -168,45 +182,31 @@ jobs:
 
           # Validate access to the backend
           echo "Validating backend access..."
-          if ! az storage blob list \
+          if az storage blob list \
               --container-name $CONTAINER_NAME \
               --account-name $STORAGE_ACCOUNT_NAME \
               --auth-mode login \
               --num-results 1 &>/dev/null; then
-            echo "ERROR: Cannot access storage container. Checking permissions..."
+            echo "✓ Backend access validated"
+          else
+            echo "ERROR: Cannot access storage container after granting permissions"
+            echo "This may indicate a role propagation delay. Waiting additional 15s..."
+            sleep 15
 
-            # Get current identity
-            CURRENT_USER=$(az account show --query user.name -o tsv)
-            echo "Current identity: $CURRENT_USER"
-
-            # Try to grant permission
-            echo "Attempting to grant Storage Blob Data Contributor role..."
-            SCOPE="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME"
-
-            if az role assignment create \
-                --assignee $CURRENT_USER \
-                --role "Storage Blob Data Contributor" \
-                --scope "$SCOPE" 2>/dev/null; then
-              echo "✓ Role assignment created"
-              sleep 10
-
-              # Verify again
-              if ! az storage blob list \
-                  --container-name $CONTAINER_NAME \
-                  --account-name $STORAGE_ACCOUNT_NAME \
-                  --auth-mode login \
-                  --num-results 1 &>/dev/null; then
-                echo "ERROR: Still cannot access storage after role assignment"
-                exit 1
-              fi
+            # Try one more time
+            if az storage blob list \
+                --container-name $CONTAINER_NAME \
+                --account-name $STORAGE_ACCOUNT_NAME \
+                --auth-mode login \
+                --num-results 1 &>/dev/null; then
+              echo "✓ Backend access validated (after retry)"
             else
-              echo "WARNING: Could not auto-grant permissions"
-              echo "Please ensure service principal has 'Storage Blob Data Contributor' role"
+              echo "ERROR: Still cannot access storage"
+              echo "Please check that service principal has necessary permissions"
               exit 1
             fi
           fi
 
-          echo "✓ Backend access validated"
           echo "✓ Terraform backend ready"
 
       - name: Setup Terraform
