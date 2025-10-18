@@ -1,6 +1,5 @@
 ---
 name: ci-cd
-
 on:
   push:
     branches: [main, dev] # Added dev branch for testing
@@ -38,7 +37,6 @@ on:
 env:
   TF_WORKING_DIR: terraform
   APP_NAME: liatrio-demo
-  # Centralized backend configuration
   TF_BACKEND_RG: tfstate-rg
   TF_BACKEND_SA: tfstateugrantliatrio
   TF_BACKEND_CONTAINER: tfstate
@@ -67,7 +65,6 @@ jobs:
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
       (github.event_name == 'workflow_dispatch')
     # build-test will be skipped when manually destroying (destroy=true)
-    # but deploy still needs it for push/PR events
     needs: [build-test]
     runs-on: ubuntu-latest
     concurrency:
