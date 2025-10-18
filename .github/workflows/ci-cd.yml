@@ -3,7 +3,7 @@ name: ci-cd
 
 "on":
   push:
-    branches: [main]
+    branches: [main, dev]  # Added dev branch for testing
     paths:
       - "app/**"
       - "Dockerfile"
@@ -24,7 +24,6 @@ env:
   TF_BACKEND_RG: tfstate-rg
   TF_BACKEND_SA: tfstateugrantliatrio
   TF_BACKEND_CONTAINER: tfstate
-  TF_BACKEND_KEY: liatrio-demo.tfstate
   TF_BACKEND_LOCATION: westus2
 
 jobs:
@@ -45,17 +44,31 @@ jobs:
           pytest -v --tb=short
 
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && github.event_name == 'push'
     needs: build-test
     runs-on: ubuntu-latest
     concurrency:
-      group: production-deployment
+      group: ${{ github.ref == 'refs/heads/main' && 'production-deployment' || 'dev-deployment' }}
       cancel-in-progress: false
     permissions:
       id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set environment variables
+        id: set_env
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+            echo "TF_BACKEND_KEY=liatrio-demo-prod.tfstate" >> $GITHUB_ENV
+            echo "DEPLOY_ENV=prod" >> $GITHUB_OUTPUT
+          else
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+            echo "TF_BACKEND_KEY=liatrio-demo-dev.tfstate" >> $GITHUB_ENV
+            echo "DEPLOY_ENV=dev" >> $GITHUB_OUTPUT
+          fi
+          echo "Deploying to environment: $(echo $ENVIRONMENT)"
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
