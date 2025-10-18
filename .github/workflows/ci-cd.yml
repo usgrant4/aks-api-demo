@@ -3,7 +3,7 @@ name: ci-cd
 
 "on":
   push:
-    branches: [main, dev]  # Added dev branch for testing
+    branches: [main, dev] # Added dev branch for testing
     paths:
       - "app/**"
       - "Dockerfile"
@@ -218,17 +218,23 @@ jobs:
       - name: Terraform Init/Apply
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_USE_OIDC: true
           ARM_BACKEND_RESOURCE_GROUP: ${{ env.TF_BACKEND_RG }}
           ARM_BACKEND_STORAGE_ACCOUNT: ${{ env.TF_BACKEND_SA }}
           ARM_BACKEND_CONTAINER: ${{ env.TF_BACKEND_CONTAINER }}
           ARM_BACKEND_KEY: ${{ env.TF_BACKEND_KEY }}
         run: |
           # Backend configuration provided via environment variables
+          # Terraform will use OIDC authentication via ARM_USE_OIDC=true
           terraform init \
             -backend-config="resource_group_name=$ARM_BACKEND_RESOURCE_GROUP" \
             -backend-config="storage_account_name=$ARM_BACKEND_STORAGE_ACCOUNT" \
             -backend-config="container_name=$ARM_BACKEND_CONTAINER" \
             -backend-config="key=$ARM_BACKEND_KEY" \
+            -backend-config="use_oidc=true" \
             -input=false
           terraform apply -auto-approve -input=false
 
@@ -444,6 +450,10 @@ jobs:
       - name: Terraform Destroy
         working-directory: terraform
         env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_USE_OIDC: true
           ARM_BACKEND_RESOURCE_GROUP: ${{ env.TF_BACKEND_RG }}
           ARM_BACKEND_STORAGE_ACCOUNT: ${{ env.TF_BACKEND_SA }}
           ARM_BACKEND_CONTAINER: ${{ env.TF_BACKEND_CONTAINER }}
@@ -455,6 +465,7 @@ jobs:
               -backend-config="storage_account_name=$ARM_BACKEND_STORAGE_ACCOUNT" \
               -backend-config="container_name=$ARM_BACKEND_CONTAINER" \
               -backend-config="key=$ARM_BACKEND_KEY" \
+              -backend-config="use_oidc=true" \
               -input=false 2>/dev/null; then
             echo "Backend not accessible, attempting init without backend..."
             if ! terraform init -backend=false -input=false; then
