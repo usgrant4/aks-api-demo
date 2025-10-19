@@ -284,11 +284,31 @@ jobs:
           if [ "${{ env.DESTROY_MODE }}" = "true" ]; then
             echo "⚠️  DESTROYING infrastructure for environment: ${{ env.ENVIRONMENT }}"
             echo "⚠️  This action is irreversible!"
-            terraform destroy -auto-approve -input=false
+
+            if ! terraform destroy -auto-approve -input=false 2>&1 | tee destroy.log; then
+              if grep -q "state blob is already locked" destroy.log; then
+                LOCK_ID=$(grep -A 2 "Lock Info:" destroy.log | grep "ID:" | awk '{print $2}')
+                echo "⚠️  State is locked (ID: $LOCK_ID). Breaking stale lock..."
+                terraform force-unlock -force "$LOCK_ID" || echo "Could not force unlock"
+                terraform destroy -auto-approve -input=false
+              else
+                exit 1
+              fi
+            fi
             echo "✓ Infrastructure destroyed successfully"
           else
             echo "Deploying to environment: ${{ env.ENVIRONMENT }}"
-            terraform apply -auto-approve -input=false
+
+            if ! terraform apply -auto-approve -input=false 2>&1 | tee apply.log; then
+              if grep -q "state blob is already locked" apply.log; then
+                LOCK_ID=$(grep -A 2 "Lock Info:" apply.log | grep "ID:" | awk '{print $2}')
+                echo "⚠️  State is locked (ID: $LOCK_ID). Breaking stale lock..."
+                terraform force-unlock -force "$LOCK_ID" || echo "Could not force unlock"
+                terraform apply -auto-approve -input=false
+              else
+                exit 1
+              fi
+            fi
             echo "✓ Infrastructure deployed successfully"
           fi
 
