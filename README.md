@@ -110,6 +110,22 @@ The **[final_deploy.ps1](final_deploy.ps1)** script provides a complete, automat
    - **Target environment**: `dev` or `prod`
 5. Click "Run workflow"
 
+**Note on Production Deployment Controls:**
+
+This demo uses a simplified deployment workflow suitable for individual projects and demonstrations. In a production enterprise environment, you would typically add:
+
+- **Pull Request Requirements**: Require PRs for merging to `main` branch (via branch protection rules)
+- **Code Review Approvals**: Require 1+ reviewer approvals before merge (GitHub Free supports this)
+- **Environment Protection**: Require manual approval before production deployment (requires GitHub Team/Enterprise)
+- **CODEOWNERS**: Define required reviewers for specific files (requires GitHub Team/Enterprise)
+
+For this demo, deployment safeguards include:
+- ✅ Separate `dev` and `main` branches with environment-specific infrastructure
+- ✅ Environment-specific Terraform state files (prevents cross-environment conflicts)
+- ✅ Manual workflow dispatch for controlled deployments
+- ✅ Automated testing before deployment
+- ✅ Concurrency controls to prevent simultaneous deployments
+
 See [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) for pipeline details.
 
 #### Option C: Manual Step-by-Step Deployment
