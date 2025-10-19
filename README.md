@@ -324,6 +324,37 @@ terraform destroy -auto-approve
   - Liveness: HTTP GET /health (15s delay, 20s period)
 - **Service**: LoadBalancer type, port 80 → 8080
 - **PodDisruptionBudget**: minAvailable: 1
+- **Vertical Pod Autoscaler**: Automatic resource rightsizing enabled
+
+### Vertical Pod Autoscaler (VPA)
+
+**Location**: [kubernetes/vpa.yaml](kubernetes/vpa.yaml)
+
+VPA is enabled to automatically optimize pod resource requests and limits based on actual usage patterns.
+
+**Configuration:**
+- **Update Mode**: Auto (automatically applies recommendations)
+- **Resource Limits**:
+  - Min: 50m CPU, 64Mi memory
+  - Max: 1000m CPU (1 core), 1Gi memory
+- **Target**: liatrio-demo deployment
+
+**Benefits:**
+- Reduces over-provisioning and infrastructure waste
+- Improves cluster resource utilization
+- Automatically adjusts to workload patterns
+- Lowers operational costs
+
+**Monitoring VPA:**
+```bash
+# View VPA recommendations
+kubectl describe vpa liatrio-demo-vpa
+
+# Check current pod resources
+kubectl top pods -l app=liatrio-demo
+```
+
+See [docs/VPA_GUIDE.md](docs/VPA_GUIDE.md) for detailed usage instructions.
 
 ### Application
 
@@ -459,6 +490,13 @@ This will remove:
 │  │  │  PodDisruptionBudget          │  │    │
 │  │  │  - minAvailable: 1            │  │    │
 │  │  └───────────────────────────────┘  │    │
+│  │                                     │    │
+│  │  ┌───────────────────────────────┐  │    │
+│  │  │  Vertical Pod Autoscaler      │  │    │
+│  │  │  - Auto resource rightsizing  │  │    │
+│  │  │  - Min: 50m CPU, 64Mi RAM     │  │    │
+│  │  │  - Max: 1 CPU, 1Gi RAM        │  │    │
+│  │  └───────────────────────────────┘  │    │
 │  └─────────────────────────────────────┘    │
 └─────────────────────────────────────────────┘
                    │
@@ -493,6 +531,12 @@ This will remove:
 - Resource requests ensure guaranteed CPU/memory
 - Connection pooling and async I/O with FastAPI
 - Platform-specific builds (linux/amd64)
+
+### Resource Optimization
+- **Vertical Pod Autoscaler (VPA)** automatically rightsizes resources
+- Reduces over-provisioning and infrastructure waste
+- Improves cluster utilization based on actual usage patterns
+- Lowers operational costs through efficient resource allocation
 
 ## Cost Breakdown
 
@@ -675,8 +719,11 @@ liatrio-demo/
 ├── app/
 │   ├── main.py                # FastAPI application
 │   └── requirements.txt       # Python dependencies
+├── docs/
+│   └── VPA_GUIDE.md           # Vertical Pod Autoscaler guide
 ├── kubernetes/
-│   └── deployment.yaml        # K8s Deployment, Service, PDB
+│   ├── deployment.yaml        # K8s Deployment, Service, PDB
+│   └── vpa.yaml               # Vertical Pod Autoscaler config
 ├── terraform/
 │   ├── main.tf                # Infrastructure definitions
 │   └── variables.tf           # Configuration variables
