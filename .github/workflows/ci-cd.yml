@@ -71,10 +71,6 @@ jobs:
       )
     needs: [build-test]
     runs-on: ubuntu-latest
-    # GitHub Environment with protection rules and approval gates
-    environment:
-      name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'development') }}
-      url: ${{ steps.get_url.outputs.app_url }}
     concurrency:
       group: ${{ github.event_name == 'workflow_dispatch' && format('{0}-deployment', github.event.inputs.environment) || (github.ref == 'refs/heads/main' && 'prod-deployment' || 'dev-deployment') }}
       cancel-in-progress: false
@@ -457,7 +453,6 @@ jobs:
 
       - name: Smoke test
         if: env.DESTROY_MODE != 'true'
-        id: get_url
         run: |
           echo "Waiting for LoadBalancer IP..."
           for i in $(seq 1 30); do
@@ -481,7 +476,6 @@ jobs:
                 echo "API Endpoint: http://$IP/"
                 echo "Health Check: http://$IP/health"
                 echo "Version: v1.0.${{ github.sha }}"
-                echo "app_url=http://$IP/" >> $GITHUB_OUTPUT
                 exit 0
               else
                 echo "⚠️ API not responding"
