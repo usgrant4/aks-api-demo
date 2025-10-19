@@ -578,6 +578,181 @@ az resource list --resource-group <resource-group-name> --output table
 | [sync-workflow-to-main.ps1](sync-workflow-to-main.ps1) | Sync workflow changes to main branch | `.\sync-workflow-to-main.ps1` |
 | [sync-workflow-to-main.sh](sync-workflow-to-main.sh) | Sync workflow changes (bash version) | `./sync-workflow-to-main.sh` |
 
+## Production Deployment & Approval Gates
+
+### Overview: Development vs Production
+
+This project is configured with **dual-environment deployment**:
+
+- **Development Environment**: Auto-deploys from `dev` branch (fast iteration)
+- **Production Environment**: Requires PR approval + deployment approval (safety and quality)
+
+### Production Deployment Flow
+
+```
+Developer              Code Review           Deployment Approval         Production
+    │                       │                        │                        │
+    ├─► Push to dev ───────►│                        │                        │
+    │   (auto-deploys)      │                        │                        │
+    │                       │                        │                        │
+    ├─► Create PR ─────────►│                        │                        │
+    │   dev → main          │                        │                        │
+    │                       │                        │                        │
+    │                  ┌────▼─────┐                  │                        │
+    │                  │ Reviewers │                 │                        │
+    │                  │ approve   │                 │                        │
+    │                  │ code      │                 │                        │
+    │                  └────┬─────┘                  │                        │
+    │                       │                        │                        │
+    │                  ┌────▼────────┐               │                        │
+    │                  │ Merge to    │               │                        │
+    │                  │ main branch │               │                        │
+    │                  └────┬────────┘               │                        │
+    │                       │                        │                        │
+    │                       │                   ┌────▼─────┐                  │
+    │                       │                   │ GitHub   │                  │
+    │                       │                   │ pauses   │                  │
+    │                       │                   │ workflow │                  │
+    │                       │                   └────┬─────┘                  │
+    │                       │                        │                        │
+    │                       │                   ┌────▼──────┐                 │
+    │                       │                   │ Approvers │                 │
+    │                       │                   │ review &  │                 │
+    │                       │                   │ approve   │                 │
+    │                       │                   └────┬──────┘                 │
+    │                       │                        │                        │
+    │                       │                        ├─► Deploy ─────────────►│
+    │                       │                        │                        │
+```
+
+### Setting Up Approval Gates
+
+**IMPORTANT**: The CI/CD workflow includes GitHub Environment support, but you must configure the environments in GitHub to enable approval gates.
+
+**Quick Setup** (Required for production deployments):
+
+1. Go to repository **Settings** → **Environments**
+2. Create two environments:
+   - `development` (no approval required)
+   - `production` (approval required)
+3. For `production` environment:
+   - Enable **Required reviewers**
+   - Add team members who can approve production deployments
+   - Set **Deployment branches** to "Protected branches only"
+4. Configure branch protection for `main`:
+   - Require pull request reviews
+   - Require status checks to pass
+   - See detailed guide: [.github/ENVIRONMENT_SETUP.md](.github/ENVIRONMENT_SETUP.md)
+
+**Without environment setup**: Workflows will fail with "environment not found" error when deploying to production.
+
+**With environment setup**: Deployments to production will pause and wait for manual approval from designated reviewers.
+
+### Deployment Workflows
+
+#### Development Workflow (Fast Iteration)
+
+```bash
+# 1. Work on dev branch
+git checkout dev
+# ... make changes ...
+git add .
+git commit -m "feat: add new feature"
+git push origin dev
+
+# 2. Automatic deployment to development environment
+#    - No approval needed
+#    - Fast feedback loop
+#    - Test in realistic environment
+```
+
+#### Production Workflow (Controlled Release)
+
+```bash
+# 1. Create Pull Request from dev to main
+#    - Go to GitHub → Pull Requests → New PR
+#    - Base: main ← Compare: dev
+#    - Fill out PR template
+#    - Request reviews
+
+# 2. Code Review Process
+#    - Reviewers examine changes
+#    - CI/CD runs automated tests
+#    - Discussions and feedback
+#    - Approval required to merge
+
+# 3. Merge to Main
+#    - Squash and merge (recommended)
+#    - Delete source branch if feature branch
+
+# 4. Deployment Approval Gate
+#    - Workflow automatically starts
+#    - Pauses at "production" environment
+#    - Designated approvers receive notification
+#    - Approver reviews deployment in Actions tab
+#    - Clicks "Review deployments" → Approve
+#    - Deployment proceeds automatically
+
+# 5. Monitor Production Deployment
+#    - Watch logs in GitHub Actions
+#    - Verify smoke tests pass
+#    - Check production endpoint
+```
+
+### Branch Protection & PR Requirements
+
+**Recommended Branch Protection Rules for `main`**:
+
+- ✅ Require pull request before merging
+- ✅ Require 1+ approvals
+- ✅ Require status checks to pass (`build-test` job)
+- ✅ Require conversation resolution
+- ✅ Restrict who can push to matching branches
+
+See [.github/ENVIRONMENT_SETUP.md](.github/ENVIRONMENT_SETUP.md) for detailed setup instructions.
+
+### Manual Deployment (Workflow Dispatch)
+
+You can also manually trigger deployments via GitHub Actions UI:
+
+1. Go to **Actions** tab
+2. Select **ci-cd** workflow
+3. Click **Run workflow**
+4. Select:
+   - **Action**: `deploy` or `destroy`
+   - **Environment**: `dev` or `prod`
+5. Click **Run workflow**
+
+**Note**: Manual deployment to `production` will still require environment approval.
+
+### Emergency Rollback
+
+If a production deployment fails or causes issues:
+
+**Option 1: Workflow Dispatch (Recommended)**
+1. Go to Actions → ci-cd → Run workflow
+2. Action: `deploy`
+3. Environment: `prod`
+4. Use a previous stable commit SHA
+5. Approve deployment
+
+**Option 2: Revert and Redeploy**
+```bash
+# Revert the problematic commit on main
+git checkout main
+git revert <bad-commit-sha>
+git push origin main
+
+# This triggers automatic deployment (with approval gate)
+```
+
+**Option 3: Destroy and Redeploy**
+```bash
+# Only in extreme cases
+# 1. Destroy via workflow dispatch (Action: destroy)
+# 2. Redeploy stable version (Action: deploy)
+```
+
 ## GitHub Workflow Management
 
 ### Why Workflow Sync is Needed
