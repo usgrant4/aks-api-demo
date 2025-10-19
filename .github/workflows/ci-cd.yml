@@ -411,6 +411,10 @@ jobs:
           sed "s#REPLACE_WITH_ACR_LOGIN/liatrio-demo:latest#$ACR/${{ env.APP_NAME }}:$IMAGE_TAG#" \
             kubernetes/deployment.yaml | kubectl apply -f -
 
+          # Deploy VPA for automatic resource rightsizing
+          echo "Deploying Vertical Pod Autoscaler..."
+          kubectl apply -f kubernetes/vpa.yaml
+
       - name: Wait for rollout
         if: env.DESTROY_MODE != 'true'
         id: rollout

@@ -72,6 +72,11 @@ resource "azurerm_kubernetes_cluster" "aks" {
     network_policy    = "azure"
   }
 
+  # Enable Vertical Pod Autoscaler addon
+  workload_autoscaler_profile {
+    vertical_pod_autoscaler_enabled = true
+  }
+
   tags = local.common_tags
 
   lifecycle {
