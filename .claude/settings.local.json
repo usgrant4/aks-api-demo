@@ -6,7 +6,22 @@
       "Bash(terraform show -json)",
       "Bash(python -c \"import sys, json; data = json.load(sys.stdin); resources = data.get(''''values'''', {}).get(''''root_module'''', {}).get(''''resources'''', []); [print(f\"\"{r[''''type'''']}.{r[''''name'''']}: {r[''''values''''].get(''''name'''', ''''N/A'''')}\"\") for r in resources]\")",
       "Bash(terraform state list)",
-      "Bash(terraform destroy -auto-approve)"
+      "Bash(terraform destroy -auto-approve)",
+      "Bash(git checkout --theirs .github/workflows/ci-cd.yml README.md)",
+      "Bash(git add .github/workflows/ci-cd.yml README.md)",
+      "Bash(git commit -m \"Merge dev: Improve workflow dispatch UI and add state management docs\")",
+      "Bash(git push origin main)",
+      "Bash(git checkout dev)",
+      "Bash(git revert --continue --no-edit)",
+      "Bash(git push origin dev)",
+      "Bash(git add README.md)",
+      "Bash(git commit -m \"docs: Clarify demo deployment workflow vs enterprise requirements\n\n- Add note explaining this is a demo setup for GitHub Free accounts\n- Document which features require GitHub Team/Enterprise\n- List enterprise-grade features that would be added in production\n- Highlight existing safeguards in the demo (branch separation, state files, etc.)\n- Set appropriate expectations for demo vs production use\")",
+      "Bash(az resource list --resource-group ugrant-liatrio-demo-dev-rg --output table)",
+      "Bash(git rm ALL_TERRAFORM_STEPS_FIXED.md AUTOMATED_PERMISSION_GRANT.md CONFIGURATION_CENTRALIZATION.md DEPLOYMENT_READY.md DESTROY_QUICK_REFERENCE.md DEV_TESTING_QUICK_START.md ENVIRONMENT_NAMING_SUMMARY.md FINAL_STATUS.md GRANT_PERMISSIONS_FIRST.md HOW_TO_TEST_DEPLOYMENT.md IMPLEMENTATION_SUMMARY.md STORAGE_PERMISSION_FIX.md TERRAFORM_OIDC_AUTH_FIX.md TROUBLESHOOT_SUBSCRIPTION_ERROR.md)",
+      "Bash(git rm docs/CHANGES.md docs/P0_P1_FIXES_APPLIED.md docs/REVIEW_FINDINGS.md docs/TODO.md)",
+      "Bash(git commit -m \"$(cat <<''EOF''\ndocs: Remove obsolete troubleshooting and fix documentation\n\n- Remove 14 temporary fix/troubleshooting docs from root directory\n- Remove 4 outdated docs from docs/ folder (changes, fixes, review findings)\n- Keep essential documentation: README, DEVELOPER_GUIDE, and organized docs/ folder\n- Cleanup improves repository maintainability and reduces clutter\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git add .gitignore)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nchore: Add Claude Code local settings to .gitignore\n\n- Add .claude/settings.local.json to .gitignore\n- Prevents local Claude Code configuration from being tracked\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
