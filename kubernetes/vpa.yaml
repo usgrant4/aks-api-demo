@@ -11,7 +11,7 @@ spec:
     kind: Deployment
     name: liatrio-demo
   updatePolicy:
-    updateMode: "Auto"  # Options: "Off", "Initial", "Recreate", "Auto"
+    updateMode: "Auto"
   resourcePolicy:
     containerPolicies:
       - containerName: api
@@ -24,5 +24,3 @@ spec:
         controlledResources:
           - cpu
           - memory
-        # Recommendation margin to account for traffic spikes
-        # Default is 15% margin, can be customized per resource

@@ -18,7 +18,6 @@ def test_timestamp_is_recent():
     data = r.json()
     timestamp = data.get("timestamp")
     current_time = int(time.time())
-    # Allow 5 second tolerance for test execution time
     assert abs(timestamp - current_time) < 5, \
         f"Timestamp {timestamp} should be within 5 seconds of {current_time}"
 

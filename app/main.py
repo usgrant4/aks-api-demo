@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 import logging
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -13,10 +12,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     logger.info("Application started successfully")
     yield
-    # Shutdown
     logger.info("Application shutting down gracefully")
 
 

@@ -8,10 +8,7 @@ terraform {
   }
 
   backend "azurerm" {
-    # Backend configuration provided via environment variables:
-    # ARM_BACKEND_RESOURCE_GROUP, ARM_BACKEND_STORAGE_ACCOUNT,
-    # ARM_BACKEND_CONTAINER, ARM_BACKEND_KEY
-    # This eliminates hardcoded duplication across files
+    # Configuration provided via environment variables to eliminate hardcoded duplication
   }
 }
 
@@ -20,10 +17,8 @@ provider "azurerm" {
 }
 
 locals {
-  # Include environment in resource naming
   name = "${var.prefix}-liatrio-demo-${var.environment}"
 
-  # Common tags with environment
   common_tags = {
     project     = "liatrio-devops-demo"
     managed_by  = "terraform"
@@ -39,7 +34,6 @@ resource "azurerm_resource_group" "rg" {
 }
 
 resource "azurerm_container_registry" "acr" {
-  # ACR names can't have hyphens, so format: prefixliatriodemoenvacr
   name                = replace("${var.prefix}liatriodemo${var.environment}acr", "-", "")
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
@@ -72,7 +66,6 @@ resource "azurerm_kubernetes_cluster" "aks" {
     network_policy    = "azure"
   }
 
-  # Enable Vertical Pod Autoscaler addon
   workload_autoscaler_profile {
     vertical_pod_autoscaler_enabled = true
   }
@@ -86,7 +79,6 @@ resource "azurerm_kubernetes_cluster" "aks" {
   }
 }
 
-# Grant AKS kubelet permission to pull from ACR
 resource "azurerm_role_assignment" "acr_pull" {
   scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPull"
