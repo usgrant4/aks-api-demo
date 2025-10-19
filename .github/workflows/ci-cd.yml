@@ -17,16 +17,16 @@ on:
       - "terraform/**"
   workflow_dispatch:
     inputs:
-      destroy:
-        description: "Destroy infrastructure (true/false)"
+      action:
+        description: "Action to perform"
         required: true
-        default: "false"
+        default: "deploy"
         type: choice
         options:
-          - "false"
-          - "true"
+          - "deploy"
+          - "destroy"
       environment:
-        description: "Environment to destroy (dev/prod)"
+        description: "Target environment"
         required: true
         default: "dev"
         type: choice
@@ -44,7 +44,7 @@ env:
 
 jobs:
   build-test:
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.destroy != 'true'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.action != 'destroy'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,8 +66,8 @@ jobs:
     if: |
       !cancelled() && (
         (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
-        (github.event_name == 'workflow_dispatch' && (needs.build-test.result == 'success' || github.event.inputs.destroy == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && needs.build-test.result == 'skipped' && github.event.inputs.destroy == 'true')
+        (github.event_name == 'workflow_dispatch' && (needs.build-test.result == 'success' || github.event.inputs.action == 'destroy')) ||
+        (github.event_name == 'workflow_dispatch' && needs.build-test.result == 'skipped' && github.event.inputs.action == 'destroy')
       )
     needs: [build-test]
     runs-on: ubuntu-latest
@@ -86,7 +86,12 @@ jobs:
           # Handle manual workflow dispatch
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             ENV="${{ github.event.inputs.environment }}"
-            DESTROY="${{ github.event.inputs.destroy }}"
+            ACTION="${{ github.event.inputs.action }}"
+            if [ "$ACTION" = "destroy" ]; then
+              DESTROY="true"
+            else
+              DESTROY="false"
+            fi
             echo "DESTROY_MODE=$DESTROY" >> $GITHUB_ENV
           else
             # Handle push events
