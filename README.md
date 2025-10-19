@@ -89,14 +89,26 @@ The **[final_deploy.ps1](final_deploy.ps1)** script provides a complete, automat
 
 #### Option B: GitHub Actions CI/CD
 
+**Automatic Deployment (Push to Branch):**
+
 1. Configure GitHub secrets (see Prerequisites)
-2. Push to `main` branch
+2. Push to `main` branch (production) or `dev` branch (development)
 3. Pipeline automatically:
    - Runs unit tests with pytest
    - Provisions/updates infrastructure with Terraform
    - Builds and pushes Docker image to ACR
    - Deploys to AKS with rolling update strategy
    - Runs smoke tests against live endpoint
+
+**Manual Deployment/Destroy (Workflow Dispatch):**
+
+1. Go to GitHub Actions tab
+2. Select "ci-cd" workflow
+3. Click "Run workflow"
+4. Select:
+   - **Action to perform**: `deploy` or `destroy`
+   - **Target environment**: `dev` or `prod`
+5. Click "Run workflow"
 
 See [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) for pipeline details.
 
@@ -563,6 +575,80 @@ az resource list --resource-group <resource-group-name> --output table
 | [deploy.sh](deploy.sh) | Alternative deployment script (bash) | `./deploy.sh` |
 | [cleanup.ps1](cleanup.ps1) | Complete cleanup including Network Watcher | `.\cleanup.ps1` |
 | [cleanup.sh](cleanup.sh) | Complete cleanup (bash version) | `./cleanup.sh` |
+| [sync-workflow-to-main.ps1](sync-workflow-to-main.ps1) | Sync workflow changes to main branch | `.\sync-workflow-to-main.ps1` |
+| [sync-workflow-to-main.sh](sync-workflow-to-main.sh) | Sync workflow changes (bash version) | `./sync-workflow-to-main.sh` |
+
+## GitHub Workflow Management
+
+### Why Workflow Sync is Needed
+
+GitHub Actions has a specific requirement: **workflow_dispatch triggers only appear in the GitHub UI when the workflow file exists in the default branch** (usually `main`). This means:
+
+- Changes to `.github/workflows/*.yml` files in `dev` branch won't show the manual "Run workflow" button
+- You must sync workflow files from `dev` to `main` to see workflow_dispatch options
+- This is a GitHub platform limitation, not a configuration issue
+
+### When to Sync Workflows
+
+Sync workflows to `main` whenever you:
+1. Add or modify workflow_dispatch inputs
+2. Create new workflows that should be manually triggerable
+3. Update workflow triggers or permissions
+
+**Important**: You don't need to sync for every code change, only when the workflow definition itself changes.
+
+### How to Sync Workflows
+
+**Automated Method (Recommended):**
+
+```powershell
+# PowerShell (Windows)
+.\sync-workflow-to-main.ps1
+
+# Bash (Linux/Mac)
+./sync-workflow-to-main.sh
+```
+
+The script will:
+1. Save your current branch
+2. Update both `dev` and `main` branches
+3. Copy `.github/workflows/` from `dev` to `main`
+4. Commit and push the changes
+5. Return you to your original branch
+
+**Manual Method:**
+
+```bash
+# From dev branch, commit your workflow changes
+git add .github/workflows/
+git commit -m "Update workflow configuration"
+git push origin dev
+
+# Switch to main and cherry-pick the workflow files
+git checkout main
+git pull origin main
+git checkout dev -- .github/workflows/
+git add .github/workflows/
+git commit -m "sync: Update GitHub workflows from dev branch"
+git push origin main
+
+# Return to dev
+git checkout dev
+```
+
+### Verifying Workflow Sync
+
+After syncing, verify the workflow_dispatch UI appears:
+
+1. Go to your GitHub repository
+2. Click the "Actions" tab
+3. Select the "ci-cd" workflow from the left sidebar
+4. You should see a "Run workflow" button on the right
+5. Clicking it should show your workflow_dispatch inputs:
+   - **Action to perform**: deploy / destroy
+   - **Target environment**: dev / prod
+
+If you don't see these options, the workflow file may not have synced to `main` yet.
 
 ## Project Structure
 
