@@ -61,10 +61,14 @@ jobs:
           pytest -v --tb=short
 
   deploy:
+    # Run on push to main/dev OR workflow_dispatch
+    # When destroying, allow even if build-test was skipped
     if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
-      (github.event_name == 'workflow_dispatch')
-    # build-test will be skipped when manually destroying (destroy=true)
+      !cancelled() && (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
+        (github.event_name == 'workflow_dispatch' && (needs.build-test.result == 'success' || github.event.inputs.destroy == 'true')) ||
+        (github.event_name == 'workflow_dispatch' && needs.build-test.result == 'skipped' && github.event.inputs.destroy == 'true')
+      )
     needs: [build-test]
     runs-on: ubuntu-latest
     concurrency:
