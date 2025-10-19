@@ -728,8 +728,8 @@ liatrio-demo/
 │   ├── main.tf                # Infrastructure definitions
 │   └── variables.tf           # Configuration variables
 ├── Dockerfile                 # Multi-stage container build
-├── final_deploy.ps1          # Automated deployment script
-└── test_deployment.ps1       # Automated testing script
+├── final_deploy.ps1           # Automated deployment script
+└── test_deployment.ps1        # Automated testing script
 ```
 
 ## Quick Reference
@@ -781,4 +781,4 @@ kubectl set image deployment/liatrio-demo api=<new-image>
 
 ## License
 
-MIT License - Use this as a template for your projects.
+MIT License
