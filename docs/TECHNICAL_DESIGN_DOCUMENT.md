@@ -2771,8 +2771,7 @@ terraform apply -var="prefix=yourname" -var="location=eastus"
 
 **Related Documentation (This Repository):**
 - [README.md](../README.md) - Quick start guide
-- [PRESENTATION_DECK_OUTLINE.md](PRESENTATION_DECK_OUTLINE.md) - Presentation slides
-- [TALKING_POINTS.md](TALKING_POINTS.md) - Speaker notes
-- [DEMO_SCRIPT.md](DEMO_SCRIPT.md) - Live demo walkthrough
+- [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) - Developer getting started guide
+- [GITHUB_SETUP.md](GITHUB_SETUP.md) - GitHub and Azure setup instructions
 
 ---
