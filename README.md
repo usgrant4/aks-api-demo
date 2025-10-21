@@ -65,7 +65,7 @@ pytest -v
 
 ### Deploy to Azure
 
-#### Option A: Automated Deployment with PowerShell (Recommended)
+#### Option A: Automated Deployment with PowerShell (local)
 
 The **[final_deploy.ps1](final_deploy.ps1)** script provides a complete, automated deployment:
 
@@ -112,7 +112,7 @@ The **[final_deploy.ps1](final_deploy.ps1)** script provides a complete, automat
 
 **Note on Production Deployment Controls:**
 
-This demo uses a simplified deployment workflow suitable for individual projects and demonstrations. In a production enterprise environment, you would typically add:
+ In a production enterprise environment, you would typically add:
 
 - **Pull Request Requirements**: Require PRs for merging to `main` branch (via branch protection rules)
 - **Code Review Approvals**: Require 1+ reviewer approvals before merge (GitHub Free supports this)
