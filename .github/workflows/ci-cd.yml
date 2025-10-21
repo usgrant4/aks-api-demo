@@ -2,7 +2,7 @@
 name: ci-cd
 on:
   push:
-    branches: [main, dev] # Added dev branch for testing
+    branches: [dev] # Added dev branch for testing
     paths:
       - "app/**"
       - "Dockerfile"
