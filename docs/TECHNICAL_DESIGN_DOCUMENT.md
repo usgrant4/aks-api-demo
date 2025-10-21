@@ -121,8 +121,7 @@ Cloud services can become expensive quickly, especially for demos that run 24/7 
 - Right-sized infrastructure (1 node, Standard_D2s_v3)
 - Free-tier AKS control plane
 - Vertical Pod Autoscaler for resource rightsizing
-- Scale-to-zero capability (reduces costs by ~40% when idle)
-- Cost monitoring utilities (`cost_management.sh`)
+- Scale-to-zero capability via manual node scaling
 - Single-region deployment (avoids cross-region data transfer costs)
 
 **Benefits:**
@@ -2004,7 +2003,12 @@ cd ..
 
 **Implementation:**
 ```bash
-bash scripts/cost_management.sh scale-down
+# Scale down node pool to 0 nodes
+az aks nodepool scale \
+  --resource-group <rg-name> \
+  --cluster-name <aks-name> \
+  --name <nodepool-name> \
+  --node-count 0
 ```
 
 **What Happens:**
@@ -2020,7 +2024,12 @@ bash scripts/cost_management.sh scale-down
 
 **Recovery:**
 ```bash
-bash scripts/cost_management.sh scale-up
+# Scale up node pool back to 1 node
+az aks nodepool scale \
+  --resource-group <rg-name> \
+  --cluster-name <aks-name> \
+  --name <nodepool-name> \
+  --node-count 1
 ```
 
 **Recovery Time:** ~2-3 minutes
@@ -2083,7 +2092,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
 
 **Savings:** ~10-20% by right-sizing resources
 
-**Implementation:** Already enabled ([kubernetes/vpa.yaml](kubernetes/vpa.yaml))
+**Implementation:** Already enabled ([kubernetes/vpa.yaml](../kubernetes/vpa.yaml))
 
 **How It Saves Money:**
 - Monitors actual CPU/memory usage
@@ -2099,33 +2108,6 @@ resource "azurerm_kubernetes_cluster" "aks" {
 ---
 
 ### 9.3 Cost Monitoring
-
-**Tool:** `scripts/cost_management.sh`
-
-**Commands:**
-
-**View Current Status:**
-```bash
-bash scripts/cost_management.sh status
-```
-
-**Output:**
-```
-=== Infrastructure Status ===
-✓ Resource Group: ugrant-liatrio-demo-dev-rg (exists)
-✓ AKS Cluster: ugrant-liatrio-demo-dev-aks (1 node(s), state: Running)
-✓ Container Registry: ugrantliatriodemodevacr (1 images)
-✓ Application Pods: 2/2 running
-✓ Service Endpoint: http://4.242.115.185/
-
-=== Cost Estimate ===
-Current monthly rate: ~$45-50 (active)
-```
-
-**View Detailed Costs:**
-```bash
-bash scripts/cost_management.sh costs
-```
 
 **Azure Cost Analysis:**
 ```bash
