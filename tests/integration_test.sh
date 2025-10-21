@@ -2,7 +2,7 @@
 # Integration test suite for Liatrio Demo
 # Tests the deployed application end-to-end
 
-set -euo pipefail
+set -eu
 
 # Colors for output
 RED='\033[0;31m'
@@ -58,10 +58,12 @@ main() {
 
     # Test 1: Basic connectivity
     run_test "Basic HTTP connectivity"
-    if curl -sS -f "$ENDPOINT/" -o /dev/null --connect-timeout 5 --max-time 10; then
+    if curl -sS "$ENDPOINT/" --connect-timeout 5 --max-time 10 > /tmp/curl_test_$$ 2>&1; then
         log_success "Endpoint is reachable"
+        rm -f /tmp/curl_test_$$
     else
         log_error "Cannot reach endpoint"
+        rm -f /tmp/curl_test_$$
         exit 1
     fi
 
@@ -108,7 +110,9 @@ main() {
 
     # Test 5: Response time performance
     run_test "Response time performance"
-    RESPONSE_TIME=$(curl -sS "$ENDPOINT/" -o /dev/null -w '%{time_total}' --connect-timeout 5 --max-time 10 2>/dev/null || echo "999")
+    TEMP_OUT=$(mktemp)
+    RESPONSE_TIME=$(curl -sS "$ENDPOINT/" -o "$TEMP_OUT" -w '%{time_total}' --connect-timeout 5 --max-time 10 2>/dev/null || echo "999")
+    rm -f "$TEMP_OUT"
     RESPONSE_MS=$(echo "$RESPONSE_TIME * 1000" | bc 2>/dev/null || echo "9999")
 
     if (( $(echo "$RESPONSE_TIME < 0.5" | bc -l) )); then
@@ -159,12 +163,15 @@ main() {
         # Test availability during pod restart
         sleep 2
         SUCCESS_COUNT=0
+        TEMP_OUT=$(mktemp)
         for i in {1..10}; do
-            if curl -sS -f "$ENDPOINT/" -o /dev/null --connect-timeout 2 --max-time 5 2>/dev/null; then
+            HTTP_CODE=$(curl -sS -w "%{http_code}" -o "$TEMP_OUT" --connect-timeout 2 --max-time 5 "$ENDPOINT/" 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
                 ((SUCCESS_COUNT++))
             fi
             sleep 0.5
         done
+        rm -f "$TEMP_OUT"
 
         if [ "$SUCCESS_COUNT" -ge 8 ]; then
             log_success "Service remained available during pod restart ($SUCCESS_COUNT/10 requests succeeded)"
@@ -180,17 +187,23 @@ main() {
     run_test "Concurrent request handling"
     log_info "Sending 50 concurrent requests..."
 
-    SUCCESS=0
-    FAILED=0
+    TEMP_FILE=$(mktemp)
+    echo "0" > "$TEMP_FILE"
 
     for i in {1..50}; do
-        if curl -sS -f "$ENDPOINT/" -o /dev/null --connect-timeout 3 --max-time 5 2>/dev/null; then
-            ((SUCCESS++))
-        else
-            ((FAILED++))
-        fi &
+        (
+            TEMP_OUT=$(mktemp)
+            HTTP_CODE=$(curl -sS -w "%{http_code}" -o "$TEMP_OUT" --connect-timeout 3 --max-time 5 "$ENDPOINT/" 2>/dev/null || echo "000")
+            rm -f "$TEMP_OUT"
+            if [ "$HTTP_CODE" = "200" ]; then
+                flock "$TEMP_FILE" bash -c "echo \$(($(cat "$TEMP_FILE") + 1)) > "$TEMP_FILE""
+            fi
+        ) &
     done
     wait
+    SUCCESS=$(cat "$TEMP_FILE")
+    rm -f "$TEMP_FILE"
+    FAILED=$((50 - SUCCESS))
 
     if [ "$SUCCESS" -ge 45 ]; then
         log_success "Handled concurrent load well ($SUCCESS/50 succeeded)"

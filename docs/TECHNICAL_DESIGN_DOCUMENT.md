@@ -1,10 +1,10 @@
 # Technical Design Document
-## Liatrio DevOps Demo - Azure AKS Deployment
+## XYZ DevOps Demo - Azure AKS Deployment
 
 **Document Version:** 1.0
 **Last Updated:** 2025-10-20
-**Author:** [Your Name]
-**Project:** Liatrio DevOps Demonstration
+**Author:** Ulysses Grant IV
+**Project:** XYZ DevOps Demonstration
 **Technology Stack:** Azure, Kubernetes, Terraform, GitHub Actions
 
 ---
@@ -209,72 +209,72 @@ The solution consists of four primary layers:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  Developer Experience                    │
-│                                                          │
+│                  Developer Experience                   │
+│                                                         │
 │  Developer → Git Push → GitHub → Automated Deployment   │
-└────────────────────┬─────────────────────────────────────┘
+└────────────────────┬────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│                 CI/CD Pipeline Layer                     │
-│                  (GitHub Actions)                        │
-│                                                          │
-│  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐    │
-│  │ Build & Test│→ │   Terraform  │→ │   Deploy    │    │
-│  │  (pytest)   │  │ (IaC Provision)│  │ (kubectl)   │    │
-│  └─────────────┘  └──────────────┘  └─────────────┘    │
-└────────────────────┬─────────────────────────────────────┘
+│                 CI/CD Pipeline Layer                    │
+│                  (GitHub Actions)                       │
+│                                                         │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐     │
+│  │ Build & Test│→ │   Terraform  │→ │   Deploy    │     │
+│  │  (pytest)   │  │ (IaC Provision)│  │ (kubectl) │     │
+│  └─────────────┘  └──────────────┘  └─────────────┘     │
+└────────────────────┬────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│              Infrastructure Layer (Azure)                │
-│                                                          │
-│  ┌──────────────────┐  ┌──────────────────┐            │
-│  │  Resource Group  │  │       ACR        │            │
-│  │                  │  │ (Container Reg)  │            │
-│  └──────────────────┘  └──────────────────┘            │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │         Azure Kubernetes Service (AKS)           │  │
-│  │                                                  │  │
-│  │  ┌────────────────────────────────────────────┐ │  │
-│  │  │         System Node Pool                   │ │  │
-│  │  │  1x Standard_D2s_v3 (2 vCPU, 8 GB RAM)    │ │  │
-│  │  └────────────────────────────────────────────┘ │  │
-│  └──────────────────────────────────────────────────┘  │
-└────────────────────┬─────────────────────────────────────┘
+│              Infrastructure Layer (Azure)               │
+│                                                         │
+│  ┌──────────────────┐  ┌──────────────────┐             │
+│  │  Resource Group  │  │       ACR        │             │
+│  │                  │  │ (Container Reg)  │             │
+│  └──────────────────┘  └──────────────────┘             │
+│                                                         │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │         Azure Kubernetes Service (AKS)           │   │
+│  │                                                  │   │
+│  │  ┌────────────────────────────────────────────┐  │   │
+│  │  │         System Node Pool                   │  │   │
+│  │  │  1x Standard_D2s_v3 (2 vCPU, 8 GB RAM)     │  │   │
+│  │  └────────────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────┘   │
+└────────────────────┬────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────┐
-│          Application Layer (Kubernetes)                  │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │           Deployment: liatrio-demo              │   │
-│  │  ┌──────────────┐     ┌──────────────┐         │   │
-│  │  │ Pod Replica 1│     │ Pod Replica 2│         │   │
-│  │  │ FastAPI App  │     │ FastAPI App  │         │   │
-│  │  │ (Port 8080)  │     │ (Port 8080)  │         │   │
-│  │  └──────────────┘     └──────────────┘         │   │
-│  │                                                 │   │
-│  │  RollingUpdate Strategy: MaxUnavailable=0      │   │
-│  │  Health Probes: /health (readiness, liveness)  │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │        Service: liatrio-demo-svc                │   │
-│  │  Type: LoadBalancer                             │   │
-│  │  Port: 80 → 8080                                │   │
-│  │  External IP: 4.242.115.185 (example)           │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │      PodDisruptionBudget: minAvailable=1        │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │   VerticalPodAutoscaler (VPA): Auto-rightsize   │   │
-│  └─────────────────────────────────────────────────┘   │
-└────────────────────┬─────────────────────────────────────┘
+│          Application Layer (Kubernetes)                 │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │           Deployment: liatrio-demo              │    │
+│  │  ┌──────────────┐     ┌──────────────┐          │    │
+│  │  │ Pod Replica 1│     │ Pod Replica 2│          │    │
+│  │  │ FastAPI App  │     │ FastAPI App  │          │    │
+│  │  │ (Port 8080)  │     │ (Port 8080)  │          │    │
+│  │  └──────────────┘     └──────────────┘          │    │
+│  │                                                 │    │
+│  │  RollingUpdate Strategy: MaxUnavailable=0       │    │
+│  │  Health Probes: /health (readiness, liveness)   │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │        Service: liatrio-demo-svc                │    │
+│  │  Type: LoadBalancer                             │    │
+│  │  Port: 80 → 8080                                │    │
+│  │  External IP: 4.242.115.185 (example)           │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │      PodDisruptionBudget: minAvailable=1        │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │   VerticalPodAutoscaler (VPA): Auto-rightsize   │    │
+│  └─────────────────────────────────────────────────┘    │
+└────────────────────┬────────────────────────────────────┘
                      │
                      ▼
                 End Users
@@ -2776,5 +2776,3 @@ terraform apply -var="prefix=yourname" -var="location=eastus"
 - [DEMO_SCRIPT.md](DEMO_SCRIPT.md) - Live demo walkthrough
 
 ---
-
-**End of Technical Design Document**
