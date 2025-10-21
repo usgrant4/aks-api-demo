@@ -1,0 +1,26 @@
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: liatrio-demo-vpa
+  labels:
+    app: liatrio-demo
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: liatrio-demo
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: api
+        minAllowed:
+          cpu: 50m
+          memory: 64Mi
+        maxAllowed:
+          cpu: 1000m
+          memory: 1Gi
+        controlledResources:
+          - cpu
+          - memory

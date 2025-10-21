@@ -1,0 +1,87 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: liatrio-demo
+  labels:
+    app: liatrio-demo
+    version: v1
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: liatrio-demo
+  template:
+    metadata:
+      labels:
+        app: liatrio-demo
+        version: v1
+    spec:
+      containers:
+        - name: api
+          image: REPLACE_WITH_ACR_LOGIN/liatrio-demo:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: liatrio-demo-svc
+  labels:
+    app: liatrio-demo
+spec:
+  type: LoadBalancer
+  selector:
+    app: liatrio-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  sessionAffinity: None
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: liatrio-demo-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: liatrio-demo
