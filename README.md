@@ -428,8 +428,6 @@ This will remove:
 
 **Note**: This leaves `NetworkWatcherRG` and `NetworkWatcher_<region>` resources.
 
-**Why?** Network Watcher is auto-created by Azure (not Terraform) and shared by all resources in the region. See [NETWORK_WATCHER_EXPLANATION.md](docs/NETWORK_WATCHER_EXPLANATION.md) for details.
-
 ## Architecture
 
 ```
