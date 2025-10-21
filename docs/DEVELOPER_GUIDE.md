@@ -556,7 +556,8 @@ Now that you're set up:
 7. ✅ Celebrate! You're a DevOps developer now! 🚀
 
 For more detailed information, see:
-- [README.md](README.md) - Full project documentation
-- [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) - CI/CD pipeline details
-- [app/main.py](app/main.py) - Application code
-- [test_api.py](test_api.py) - Test examples
+- [README.md](../README.md) - Full project documentation
+- [.github/workflows/ci-cd.yml](../.github/workflows/ci-cd.yml) - CI/CD pipeline details
+- [app/main.py](../app/main.py) - Application code
+- [GITHUB_SETUP.md](GITHUB_SETUP.md) - GitHub and Azure setup instructions
+- [TECHNICAL_DESIGN_DOCUMENT.md](TECHNICAL_DESIGN_DOCUMENT.md) - Detailed technical design

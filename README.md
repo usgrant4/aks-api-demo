@@ -354,8 +354,6 @@ kubectl describe vpa liatrio-demo-vpa
 kubectl top pods -l app=liatrio-demo
 ```
 
-See [docs/VPA_GUIDE.md](docs/VPA_GUIDE.md) for detailed usage instructions.
-
 ### Application
 
 **Location**: [app/main.py](app/main.py)
@@ -718,7 +716,9 @@ liatrio-demo/
 │   ├── main.py                # FastAPI application
 │   └── requirements.txt       # Python dependencies
 ├── docs/
-│   └── VPA_GUIDE.md           # Vertical Pod Autoscaler guide
+│   ├── DEVELOPER_GUIDE.md     # Developer getting started guide
+│   ├── GITHUB_SETUP.md        # GitHub and Azure setup instructions
+│   └── TECHNICAL_DESIGN_DOCUMENT.md  # Detailed technical design
 ├── kubernetes/
 │   ├── deployment.yaml        # K8s Deployment, Service, PDB
 │   └── vpa.yaml               # Vertical Pod Autoscaler config
