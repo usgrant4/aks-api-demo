@@ -1,6 +1,6 @@
 # Developer Guide: Getting Started
 
-This guide will help you get set up and start deploying to the liatrio-demo project in minutes.
+This guide will help you as a dev get set up and start deploying to the liatrio-demo project in minutes.
 
 ## Table of Contents
 

@@ -1,4 +1,4 @@
-# Liatrio DevOps Demo (Azure AKS)
+# XYZ DevOps Demo (Azure AKS)
 
 A production-ready demonstration of modern DevOps practices using Azure cloud infrastructure, automated CI/CD pipelines, and Kubernetes orchestration.
 
@@ -778,7 +778,3 @@ kubectl set image deployment/liatrio-demo api=<new-image>
 - [Terraform Azure Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
-
-## License
-
-MIT License
