@@ -17,7 +17,7 @@ This project showcases a complete DevOps workflow including:
 ## Stack
 
 - **Cloud**: Azure (Resource Group, ACR, AKS)
-- **IaC**: Terraform 1.9.6
+- **IaC**: Terraform 1.10.5
 - **App**: Python 3.11 + FastAPI 0.115.5
 - **Container**: Multi-stage Docker build (Python 3.11-slim base)
 - **Orchestration**: Azure Kubernetes Service (AKS 1.32.7)
