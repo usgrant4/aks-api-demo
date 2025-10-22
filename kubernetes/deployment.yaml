@@ -22,7 +22,6 @@ spec:
         app: liatrio-demo
         version: v1
     spec:
-      # Security: Pod-level security context
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -34,7 +33,6 @@ spec:
         - name: api
           image: REPLACE_WITH_ACR_LOGIN/liatrio-demo:latest
           imagePullPolicy: Always
-          # Security: Container-level security context
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -70,7 +68,6 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 3
             failureThreshold: 3
-          # Security: Mount tmpfs volumes for writable directories
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -80,7 +77,6 @@ spec:
             preStop:
               exec:
                 command: ["/bin/sh", "-c", "sleep 5"]
-      # Security: Define tmpfs volumes for read-only filesystem
       volumes:
         - name: tmp
           emptyDir: {}

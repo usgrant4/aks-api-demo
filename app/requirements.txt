@@ -1,13 +1,5 @@
-# Security: Pin exact versions to ensure reproducible builds
-# and prevent unexpected dependency changes
-# Use 'pip list --format=freeze' to see all transitive dependencies
-
-# Web Framework
+# Pinned versions for reproducible builds
 fastapi==0.119.1
-
-# ASGI Server
 uvicorn==0.38.0
-
-# Testing
 pytest==8.4.2
 httpx==0.28.1

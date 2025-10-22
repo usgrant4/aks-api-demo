@@ -23,6 +23,7 @@ This project showcases a complete DevOps workflow including:
 - **Container**: Multi-stage Docker build (Python 3.11-slim base)
 - **Orchestration**: Azure Kubernetes Service (AKS 1.32.7)
 - **CI/CD**: GitHub Actions with OIDC authentication
+- **Security**: Trivy (vulnerability scanning), Dependabot (dependency updates)
 - **Testing**: pytest (unit) + integration tests + smoke tests
 
 ## Prerequisites
@@ -98,6 +99,8 @@ The **[final_deploy.ps1](final_deploy.ps1)** script provides a complete, automat
    - Runs unit tests with pytest
    - Provisions/updates infrastructure with Terraform
    - Builds and pushes Docker image to ACR
+   - Scans image for vulnerabilities with Trivy
+   - Uploads security scan results to GitHub Security tab
    - Deploys to AKS with rolling update strategy
    - Runs smoke tests against live endpoint
 
@@ -574,10 +577,12 @@ kubectl top pods -l app=liatrio-demo
 - `GET /health` - Health check endpoint for Kubernetes probes
 
 **Dependencies** ([app/requirements.txt](app/requirements.txt)):
-- fastapi==0.115.5
-- uvicorn==0.32.0
-- pytest==8.3.3
-- httpx==0.27.2
+- fastapi==0.119.1 (pinned)
+- uvicorn==0.38.0 (pinned)
+- pytest==8.4.2 (pinned)
+- httpx==0.28.1 (pinned)
+
+All dependencies use exact version pinning to ensure reproducible builds and protect against supply chain attacks.
 
 ### Docker Image
 
@@ -650,6 +655,8 @@ This will remove:
 │  ├─ pytest (unit tests)                     │
 │  ├─ Terraform init/apply                    │
 │  ├─ Docker build & push to ACR              │
+│  ├─ Trivy vulnerability scan                │
+│  ├─ Upload results to GitHub Security       │
 │  ├─ kubectl apply (rolling update)          │
 │  └─ Smoke tests (curl)                      │
 └──────────────────┬──────────────────────────┘
@@ -929,23 +936,27 @@ If you don't see these options, the workflow file may not have synced to `main` 
 
 ```
 liatrio-demo/
-├── .github/workflows/
-│   └── ci-cd.yml              # GitHub Actions pipeline
+├── .github/
+│   ├── dependabot.yml         # Automated dependency updates config
+│   └── workflows/
+│       └── ci-cd.yml          # GitHub Actions pipeline with Trivy scanning
 ├── app/
 │   ├── main.py                # FastAPI application
-│   └── requirements.txt       # Python dependencies
+│   ├── requirements.txt       # Python dependencies (pinned versions)
+│   └── test_api.py            # Unit tests
 ├── docs/
 │   ├── DEVELOPER_GUIDE.md     # Developer getting started guide
 │   └── GITHUB_SETUP.md        # GitHub and Azure setup instructions
 ├── kubernetes/
-│   ├── deployment.yaml        # K8s Deployment, Service, PDB
+│   ├── deployment.yaml        # K8s Deployment with security contexts, Service, PDB
 │   └── vpa.yaml               # Vertical Pod Autoscaler config
 ├── terraform/
 │   ├── main.tf                # Infrastructure definitions
 │   └── variables.tf           # Configuration variables
-├── Dockerfile                 # Multi-stage container build
+├── Dockerfile                 # Multi-stage container build (non-root user)
 ├── final_deploy.ps1           # Automated deployment script
-└── test_deployment.ps1        # Automated testing script
+├── test_deployment.ps1        # Automated testing script
+└── README.md                  # This file
 ```
 
 ## Quick Reference
