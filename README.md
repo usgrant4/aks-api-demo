@@ -356,7 +356,7 @@ Benefits:
 
 **GitHub Actions Security** ([.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml))
 - OIDC authentication (no static credentials)
-- Minimal `id-token: write` permission for Azure login
+- Minimal permissions: `id-token: write` (Azure login), `contents: read` (checkout), `security-events: write` (Trivy uploads)
 - Separate state files per environment (prevents cross-contamination)
 - Concurrency controls prevent simultaneous deployments
 - Automated rollback on deployment failure
