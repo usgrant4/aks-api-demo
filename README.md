@@ -18,7 +18,7 @@ This project showcases a complete DevOps workflow including:
 
 - **Cloud**: Azure (Resource Group, ACR, AKS)
 - **IaC**: Terraform 1.10.5
-- **App**: Python 3.11 + FastAPI 0.115.5
+- **App**: Python 3.11 + FastAPI 0.119.1
 - **Container**: Multi-stage Docker build (Python 3.11-slim base)
 - **Orchestration**: Azure Kubernetes Service (AKS 1.32.7)
 - **CI/CD**: GitHub Actions with OIDC authentication
@@ -358,7 +358,7 @@ kubectl top pods -l app=liatrio-demo
 
 **Location**: [app/main.py](app/main.py)
 
-**Framework**: FastAPI 0.115.5
+**Framework**: FastAPI 0.119.1
 **Runtime**: Python 3.11
 
 **Endpoints:**
