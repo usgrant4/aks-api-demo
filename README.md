@@ -11,6 +11,7 @@ This project showcases a complete DevOps workflow including:
 - Containerized Python FastAPI application
 - Automated CI/CD with GitHub Actions
 - Kubernetes deployment on Azure AKS
+- Comprehensive security hardening and vulnerability scanning
 - Comprehensive testing and monitoring
 - Cost-optimized cloud infrastructure
 
@@ -214,6 +215,213 @@ curl "http://$IP/health"
 # Main endpoint: {"message": "Automate all the things!", "timestamp": 1234567890}
 # Health endpoint: {"status": "healthy", "timestamp": 1234567890}
 ```
+
+## Security Features
+
+This project implements multiple layers of security best practices:
+
+### Container Image Security
+
+**Vulnerability Scanning with Trivy**
+
+Container images are automatically scanned for vulnerabilities during the CI/CD pipeline:
+- Scans for CRITICAL and HIGH severity vulnerabilities
+- Reports uploaded to GitHub Security tab for tracking
+- Runs after every image build in [ci-cd.yml](.github/workflows/ci-cd.yml:403-428)
+- Ignores unfixed vulnerabilities to reduce noise
+
+View scan results: GitHub → Security tab → Code scanning alerts
+
+**Image Build Security** ([Dockerfile](Dockerfile))
+- Multi-stage build minimizes attack surface
+- Base image: `python:3.11-slim` (minimal dependencies)
+- Non-root user (UID 1000) prevents privilege escalation
+- No package manager caches in final image
+- Platform-specific builds (linux/amd64)
+
+### Dependency Management
+
+**Automated Updates with Dependabot** ([.github/dependabot.yml](.github/dependabot.yml))
+
+Dependabot automatically monitors and creates PRs for:
+- **Python dependencies** in [app/requirements.txt](app/requirements.txt) - checked weekly
+- **Docker base images** in [Dockerfile](Dockerfile) - checked weekly
+- **GitHub Actions** in [.github/workflows/](.github/workflows/) - checked weekly
+
+Configuration:
+- Weekly security scans on Mondays at 9 AM
+- Maximum 5 open PRs per ecosystem
+- Automatic labeling with "dependencies" and ecosystem tags
+- Reviewer assignment to maintain oversight
+
+**Version Pinning** ([app/requirements.txt](app/requirements.txt))
+
+All Python dependencies use exact version pinning:
+```
+fastapi==0.119.1
+uvicorn==0.38.0
+pytest==8.4.2
+httpx==0.28.1
+```
+
+Benefits:
+- Reproducible builds across all environments
+- Protection against supply chain attacks
+- Controlled dependency updates via Dependabot PRs
+
+### Runtime Security
+
+**Kubernetes Security Contexts** ([kubernetes/deployment.yaml](kubernetes/deployment.yaml:25-45))
+
+Pod-level security:
+```yaml
+securityContext:
+  runAsNonRoot: true       # Prevent root execution
+  runAsUser: 1000          # Specific non-root UID
+  runAsGroup: 1000         # Specific non-root GID
+  fsGroup: 1000            # File system ownership
+  seccompProfile:
+    type: RuntimeDefault   # Restrict system calls
+```
+
+Container-level security:
+```yaml
+securityContext:
+  allowPrivilegeEscalation: false  # Prevent privilege gain
+  readOnlyRootFilesystem: true     # Immutable filesystem
+  runAsNonRoot: true               # Enforce non-root
+  runAsUser: 1000                  # Specific UID
+  capabilities:
+    drop:
+      - ALL                         # Remove all Linux capabilities
+```
+
+**Read-Only Filesystem** ([kubernetes/deployment.yaml](kubernetes/deployment.yaml:73-88))
+
+Root filesystem is read-only with tmpfs volumes for necessary writable directories:
+```yaml
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp           # Temporary files
+  - name: cache
+    mountPath: /app/.cache    # Application cache
+```
+
+Benefits:
+- Prevents malicious file modifications
+- Limits attack surface for container escapes
+- Enforces immutable infrastructure
+
+### Identity and Access Management
+
+**Azure Managed Identities**
+- ACR admin account disabled (no static credentials)
+- AKS kubelet uses system-assigned managed identity
+- Automatic credential rotation by Azure platform
+- Least privilege access with AcrPull role
+
+**GitHub Actions OIDC Authentication** ([.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml:116-121))
+- No static Azure credentials stored in GitHub
+- Short-lived tokens issued per workflow run
+- Federated identity trust between GitHub and Azure
+- Configured via Azure AD app registration
+
+### Network Security
+
+**Azure CNI with Network Policy** (Terraform configuration)
+- Azure Container Networking Interface for pod networking
+- Azure Network Policy for micro-segmentation
+- Standard Load Balancer with DDoS protection
+- Private cluster communication within Azure VNet
+
+### Resource Protection
+
+**Resource Limits** ([kubernetes/deployment.yaml](kubernetes/deployment.yaml:50-57))
+```yaml
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+```
+
+Benefits:
+- Prevents resource exhaustion attacks
+- Ensures fair resource allocation
+- Protects cluster stability
+
+### CI/CD Pipeline Security
+
+**GitHub Actions Security** ([.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml))
+- OIDC authentication (no static credentials)
+- Minimal `id-token: write` permission for Azure login
+- Separate state files per environment (prevents cross-contamination)
+- Concurrency controls prevent simultaneous deployments
+- Automated rollback on deployment failure
+
+**Terraform State Security**
+- Remote state in Azure Storage with encryption
+- HTTPS-only access enforced
+- TLS 1.2 minimum version
+- Public blob access disabled
+- RBAC-controlled access
+
+### Security Monitoring
+
+**Where to Find Security Information**
+
+1. **Vulnerability Scan Results**
+   - GitHub → Security tab → Code scanning alerts
+   - Updated after every CI/CD run
+
+2. **Dependabot Alerts**
+   - GitHub → Security tab → Dependabot alerts
+   - Automatic PRs in Pull requests tab
+
+3. **CI/CD Pipeline Logs**
+   - GitHub → Actions tab → Latest workflow run
+   - Look for "Run Trivy vulnerability scanner" step
+
+4. **Kubernetes Security Events**
+   ```bash
+   # Check pod security violations
+   kubectl get events --field-selector type=Warning
+
+   # Verify security contexts are applied
+   kubectl get pod <pod-name> -o yaml | grep -A 10 securityContext
+   ```
+
+### Security Best Practices Checklist
+
+- ✅ Container vulnerability scanning (Trivy)
+- ✅ Automated dependency updates (Dependabot)
+- ✅ Non-root container execution
+- ✅ Read-only root filesystem
+- ✅ Dropped Linux capabilities
+- ✅ seccomp profiles enforced
+- ✅ Kubernetes security contexts
+- ✅ Exact dependency version pinning
+- ✅ Managed identities (no static credentials)
+- ✅ OIDC authentication for CI/CD
+- ✅ Resource limits configured
+- ✅ Network policies enabled
+- ✅ Encrypted remote state
+- ✅ HTTPS-only access
+
+### Future Security Enhancements
+
+Consider these additional security measures for production deployments:
+
+- **Image Signing**: Content trust and signed container images
+- **Pod Security Standards**: Enforce restricted pod security standards cluster-wide
+- **Network Policies**: Fine-grained network segmentation between pods
+- **Secret Management**: Azure Key Vault integration for sensitive configuration
+- **Audit Logging**: Azure Monitor and Log Analytics for security event tracking
+- **Vulnerability Enforcement**: Fail CI/CD builds on CRITICAL vulnerabilities
+- **SBOM Generation**: Software Bill of Materials for supply chain visibility
+- **Runtime Security**: Falco or similar for runtime threat detection
 
 ## Infrastructure Details
 
@@ -510,11 +718,22 @@ This will remove:
 - PodDisruptionBudget ensures minimum availability (minAvailable: 1)
 
 ### Security
-- ACR admin credentials disabled (uses managed identity)
-- AKS kubelet has AcrPull role assignment
-- Non-root container user (UID 1000)
-- Resource limits prevent resource exhaustion
-- Azure CNI with Azure Network Policy
+- **Container Image Scanning**: Trivy vulnerability scanner integrated in CI/CD pipeline
+- **Dependency Management**: Dependabot automated security updates for Python, Docker, and GitHub Actions
+- **Container Security**:
+  - Non-root container user (UID 1000)
+  - Read-only root filesystem with tmpfs volumes for writable directories
+  - Dropped all Linux capabilities
+  - seccomp profile enforced (RuntimeDefault)
+  - No privilege escalation allowed
+- **Kubernetes Security Contexts**: Pod and container-level security policies enforced
+- **Identity Management**:
+  - ACR admin credentials disabled (uses managed identity)
+  - AKS kubelet has AcrPull role assignment
+  - OIDC authentication for GitHub Actions
+- **Resource Protection**: Resource limits prevent resource exhaustion attacks
+- **Network Security**: Azure CNI with Azure Network Policy
+- **Dependency Pinning**: Exact version pinning for all Python dependencies
 
 ### Observability
 - Dedicated `/health` endpoint for Kubernetes probes
