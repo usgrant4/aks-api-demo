@@ -717,8 +717,7 @@ liatrio-demo/
 │   └── requirements.txt       # Python dependencies
 ├── docs/
 │   ├── DEVELOPER_GUIDE.md     # Developer getting started guide
-│   ├── GITHUB_SETUP.md        # GitHub and Azure setup instructions
-│   └── TECHNICAL_DESIGN_DOCUMENT.md  # Detailed technical design
+│   └── GITHUB_SETUP.md        # GitHub and Azure setup instructions
 ├── kubernetes/
 │   ├── deployment.yaml        # K8s Deployment, Service, PDB
 │   └── vpa.yaml               # Vertical Pod Autoscaler config

@@ -560,4 +560,3 @@ For more detailed information, see:
 - [.github/workflows/ci-cd.yml](../.github/workflows/ci-cd.yml) - CI/CD pipeline details
 - [app/main.py](../app/main.py) - Application code
 - [GITHUB_SETUP.md](GITHUB_SETUP.md) - GitHub and Azure setup instructions
-- [TECHNICAL_DESIGN_DOCUMENT.md](TECHNICAL_DESIGN_DOCUMENT.md) - Detailed technical design
