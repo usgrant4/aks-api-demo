@@ -261,7 +261,7 @@ jobs:
           terraform_version: 1.10.5
           terraform_wrapper: false
 
-      - name: Terraform Init/Apply/Destroy
+      - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -284,34 +284,87 @@ jobs:
             -backend-config="use_oidc=true" \
             -input=false
 
+      - name: Check and handle state lock
+        if: always()
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_USE_OIDC: true
+          TF_VAR_environment: ${{ env.ENVIRONMENT }}
+        run: |
+          echo "Checking for stale state locks..."
+
+          # Try to get current lock info using Azure Storage API
+          LOCK_BLOB="${{ env.TF_BACKEND_KEY }}.lock"
+          LOCK_INFO=$(az storage blob show \
+            --container-name ${{ env.TF_BACKEND_CONTAINER }} \
+            --name "$LOCK_BLOB" \
+            --account-name ${{ env.TF_BACKEND_SA }} \
+            --auth-mode login \
+            -o json 2>/dev/null || echo "{}")
+
+          if [ "$LOCK_INFO" != "{}" ]; then
+            echo "⚠️  Lock file found: $LOCK_BLOB"
+
+            # Get lock metadata
+            LOCK_CREATED=$(echo "$LOCK_INFO" | jq -r '.properties.createdOn // empty')
+
+            if [ -n "$LOCK_CREATED" ]; then
+              LOCK_AGE_SECONDS=$(( $(date +%s) - $(date -d "$LOCK_CREATED" +%s 2>/dev/null || echo "0") ))
+              LOCK_AGE_MINUTES=$(( LOCK_AGE_SECONDS / 60 ))
+
+              echo "Lock age: ${LOCK_AGE_MINUTES} minutes"
+
+              # Consider locks older than 15 minutes as stale
+              if [ $LOCK_AGE_MINUTES -gt 15 ]; then
+                echo "⚠️  Lock appears stale (${LOCK_AGE_MINUTES} minutes old)"
+                echo "Attempting to retrieve lock ID and force unlock..."
+
+                # Download lock file to get the lock ID
+                az storage blob download \
+                  --container-name ${{ env.TF_BACKEND_CONTAINER }} \
+                  --name "$LOCK_BLOB" \
+                  --account-name ${{ env.TF_BACKEND_SA }} \
+                  --auth-mode login \
+                  --file /tmp/lock.json 2>/dev/null || true
+
+                if [ -f /tmp/lock.json ]; then
+                  LOCK_ID=$(jq -r '.ID // empty' /tmp/lock.json)
+                  if [ -n "$LOCK_ID" ]; then
+                    echo "Lock ID: $LOCK_ID"
+                    echo "Force unlocking..."
+                    terraform force-unlock -force "$LOCK_ID" || echo "Force unlock failed, will retry on terraform operation"
+                  fi
+                fi
+              else
+                echo "Lock is recent (${LOCK_AGE_MINUTES} minutes old), another operation may be in progress"
+                echo "Waiting 30 seconds before proceeding..."
+                sleep 30
+              fi
+            fi
+          else
+            echo "✓ No lock file found, state is unlocked"
+          fi
+
+      - name: Terraform Apply/Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_USE_OIDC: true
+          TF_VAR_environment: ${{ env.ENVIRONMENT }}
+        run: |
           if [ "${{ env.DESTROY_MODE }}" = "true" ]; then
             echo "⚠️  DESTROYING infrastructure for environment: ${{ env.ENVIRONMENT }}"
             echo "⚠️  This action is irreversible!"
-
-            if ! terraform destroy -auto-approve -input=false 2>&1 | tee destroy.log; then
-              if grep -q "state blob is already locked" destroy.log; then
-                LOCK_ID=$(grep -A 2 "Lock Info:" destroy.log | grep "ID:" | awk '{print $2}')
-                echo "⚠️  State is locked (ID: $LOCK_ID). Breaking stale lock..."
-                terraform force-unlock -force "$LOCK_ID" || echo "Could not force unlock"
-                terraform destroy -auto-approve -input=false
-              else
-                exit 1
-              fi
-            fi
+            terraform destroy -auto-approve -input=false
             echo "✓ Infrastructure destroyed successfully"
           else
             echo "Deploying to environment: ${{ env.ENVIRONMENT }}"
-
-            if ! terraform apply -auto-approve -input=false 2>&1 | tee apply.log; then
-              if grep -q "state blob is already locked" apply.log; then
-                LOCK_ID=$(grep -A 2 "Lock Info:" apply.log | grep "ID:" | awk '{print $2}')
-                echo "⚠️  State is locked (ID: $LOCK_ID). Breaking stale lock..."
-                terraform force-unlock -force "$LOCK_ID" || echo "Could not force unlock"
-                terraform apply -auto-approve -input=false
-              else
-                exit 1
-              fi
-            fi
+            terraform apply -auto-approve -input=false
             echo "✓ Infrastructure deployed successfully"
           fi
 
