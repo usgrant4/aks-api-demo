@@ -1,7 +1,7 @@
 # Pin exact versions to ensure reproducible builds and prevent unexpected dependency changes
 
 # Web Framework
-fastapi==0.119.1
+fastapi==0.121.1
 
 # ASGI Server
 uvicorn==0.38.0
