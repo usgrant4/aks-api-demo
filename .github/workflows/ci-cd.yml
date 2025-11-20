@@ -462,9 +462,18 @@ jobs:
       - name: Validate Helm chart
         if: env.DESTROY_MODE != 'true'
         run: |
+          # Determine values file based on environment
+          if [ "${{ env.ENVIRONMENT }}" == "prod" ]; then
+            VALUES_FILE="./helm/aks-demo/values-prod.yaml"
+          else
+            VALUES_FILE="./helm/aks-demo/values.yaml"
+          fi
+
+          echo "Using values file: $VALUES_FILE"
+
           echo "Linting Helm chart..."
           helm lint ./helm/aks-demo \
-            --values ./helm/aks-demo/values-${{ env.ENVIRONMENT }}.yaml
+            --values $VALUES_FILE
 
           echo "Validating Helm chart with dry-run..."
           helm install aks-demo ./helm/aks-demo \
@@ -472,7 +481,7 @@ jobs:
             --set image.registry=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }} \
             --set image.tag=${{ github.sha }} \
             --set environment=${{ env.ENVIRONMENT }} \
-            --values ./helm/aks-demo/values-${{ env.ENVIRONMENT }}.yaml \
+            --values $VALUES_FILE \
             --namespace aks-demo-${{ env.ENVIRONMENT }} \
             > /tmp/helm-dry-run.yaml
 
@@ -483,7 +492,7 @@ jobs:
             --set image.registry=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }} \
             --set image.tag=${{ github.sha }} \
             --set environment=${{ env.ENVIRONMENT }} \
-            --values ./helm/aks-demo/values-${{ env.ENVIRONMENT }}.yaml \
+            --values $VALUES_FILE \
             > /tmp/helm-rendered.yaml
 
           echo "✓ Helm templates rendered successfully"
@@ -554,16 +563,24 @@ jobs:
           ACR=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}
           IMAGE_TAG=${{ steps.acr_build.outputs.IMAGE_TAG }}
 
+          # Determine values file based on environment
+          if [ "${{ env.ENVIRONMENT }}" == "prod" ]; then
+            VALUES_FILE="./helm/aks-demo/values-prod.yaml"
+          else
+            VALUES_FILE="./helm/aks-demo/values.yaml"
+          fi
+
           echo "Deploying AKS Demo with Helm..."
           echo "Environment: ${{ env.ENVIRONMENT }}"
           echo "Namespace: $NAMESPACE"
           echo "Image: $ACR/${{ env.APP_NAME }}:$IMAGE_TAG"
+          echo "Values file: $VALUES_FILE"
 
           helm upgrade --install aks-demo ./helm/aks-demo \
             --set image.registry=$ACR \
             --set image.tag=$IMAGE_TAG \
             --set environment=${{ env.ENVIRONMENT }} \
-            --values ./helm/aks-demo/values-${{ env.ENVIRONMENT }}.yaml \
+            --values $VALUES_FILE \
             --namespace $NAMESPACE \
             --create-namespace \
             --wait \
