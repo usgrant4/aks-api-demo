@@ -22,6 +22,7 @@ This project showcases a complete DevOps workflow including:
 - **App**: Python 3.11 + FastAPI 0.119.1
 - **Container**: Multi-stage Docker build (Python 3.11-slim base)
 - **Orchestration**: Azure Kubernetes Service (AKS 1.32.7)
+- **Deployment**: Helm 3 charts with multi-environment support
 - **CI/CD**: GitHub Actions with OIDC authentication
 - **Security**: Trivy (vulnerability scanning), Dependabot (dependency updates)
 - **Testing**: pytest (unit) + integration tests + smoke tests
@@ -32,8 +33,11 @@ This project showcases a complete DevOps workflow including:
 - **Azure CLI** - For Azure resource management
 - **Terraform** >= 1.6.0 - Infrastructure as Code
 - **kubectl** - Kubernetes cluster management
+- **Helm** >= 3.0 - Kubernetes package manager (**REQUIRED** for new Helm deployment)
 - **Docker** - Container builds (optional for local development)
 - **PowerShell** - For running deployment scripts (Windows)
+
+> **📋 Detailed Installation Instructions**: See [SYSTEM_REQUIREMENTS.md](SYSTEM_REQUIREMENTS.md) for complete installation guides for all tools.
 
 ### Azure Requirements
 - Active Azure subscription with Contributor access
@@ -67,29 +71,59 @@ pytest -v
 
 ### Deploy to Azure
 
-#### Option A: Automated Deployment with PowerShell (local)
+#### Option A: Helm Deployment (Recommended)
 
-The **[final_deploy.ps1](final_deploy.ps1)** script provides a complete, automated deployment:
+The **[helm_deploy.ps1](helm_deploy.ps1)** / **[helm_deploy.sh](helm_deploy.sh)** scripts provide production-grade Helm-based deployment:
+
+```powershell
+# PowerShell - Fresh deployment (provisions everything from scratch)
+.\helm_deploy.ps1 -Environment dev
+
+# PowerShell - Production deployment
+.\helm_deploy.ps1 -Environment prod
+
+# Bash - Development deployment
+./helm_deploy.sh dev
+
+# Skip infrastructure provisioning (if already deployed)
+.\helm_deploy.ps1 -Environment dev -SkipInfra
+```
+
+**What it does:**
+1. Validates prerequisites (Helm 3.x, kubectl, Azure CLI)
+2. Deploys Azure infrastructure with Terraform (Resource Group, ACR, AKS)
+3. Configures kubectl with AKS credentials
+4. Attaches ACR to AKS cluster for image pulling
+5. Builds and pushes Docker image to ACR using ACR Tasks
+6. Validates Helm chart (lint + dry-run)
+7. Deploys application using Helm with environment-specific values
+8. Verifies deployment health and rollback capability
+9. Provisions LoadBalancer and retrieves public IP
+10. Runs smoke tests against the API
+
+**Deployment time**: ~10-12 minutes (first run)
+
+**Helm Features**:
+- ✅ Automated rollback on failure (--atomic)
+- ✅ Release versioning and history
+- ✅ Environment-specific configurations
+- ✅ Namespace isolation (aks-demo-dev, aks-demo-prod)
+- ✅ Easy rollback: `helm rollback aks-demo [REVISION] -n <namespace>`
+
+See **[HELM_MIGRATION.md](HELM_MIGRATION.md)** for complete Helm documentation.
+
+#### Option B: Traditional kubectl Deployment
+
+The **[final_deploy.ps1](final_deploy.ps1)** script provides kubectl-based deployment (legacy):
 
 ```powershell
 # Fresh deployment (provisions everything from scratch)
 .\final_deploy.ps1
 ```
 
-**What it does:**
-1. Deploys Azure infrastructure with Terraform (Resource Group, ACR, AKS)
-2. Configures kubectl with AKS credentials
-3. Attaches ACR to AKS cluster for image pulling
-4. Builds and pushes Docker image to ACR using ACR Tasks
-5. Verifies image manifest and platform compatibility
-6. Deploys application to Kubernetes (2 replicas)
-7. Waits for pods to be ready
-8. Provisions LoadBalancer and retrieves public IP
-9. Runs smoke tests against the API
+**Note**: Helm deployment is recommended for production use. The kubectl approach is maintained for backward compatibility.
 
-**Deployment time**: ~10-12 minutes (first run)
-
-#### Option B: GitHub Actions CI/CD
+#### Option C: GitHub Actions CI/CD
 
 **Automatic Deployment (Push to Branch):**
 
@@ -99,10 +133,12 @@ The **[final_deploy.ps1](final_deploy.ps1)** script provides a complete, automat
    - Runs unit tests with pytest
    - Provisions/updates infrastructure with Terraform
    - Builds and pushes Docker image to ACR
+   - Validates Helm chart (lint + dry-run + template rendering)
    - Scans image for vulnerabilities with Trivy
    - Uploads security scan results to GitHub Security tab
-   - Deploys to AKS with rolling update strategy
-   - Runs smoke tests against live endpoint
+   - Deploys to AKS using Helm with environment-specific values
+   - Verifies deployment and tests rollback capability
+   - Runs comprehensive smoke tests against live endpoint
 
 **Manual Deployment/Destroy (Workflow Dispatch):**
 
@@ -132,7 +168,14 @@ For this demo, deployment safeguards include:
 
 See [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) for pipeline details.
 
-#### Option C: Manual Step-by-Step Deployment
+**CI/CD Enhancements:**
+- ✅ Helm chart validation before deployment
+- ✅ Atomic deployments with automatic rollback
+- ✅ Namespace isolation per environment
+- ✅ Comprehensive verification steps
+- ✅ Rollback testing (dry-run)
+
+#### Option D: Manual Step-by-Step Deployment
 
 ```powershell
 # 1. Provision infrastructure
@@ -155,21 +198,21 @@ az aks update --resource-group $RG --name $AKS --attach-acr $ACR_NAME
 # 5. Build and push image using ACR Tasks
 cd ..
 az acr build --registry $ACR_NAME `
-  --image "liatrio-demo:latest" `
+  --image "aks-demo:latest" `
   --platform linux/amd64 `
   --file Dockerfile .
 
 # 6. Deploy to Kubernetes
-$IMAGE = "$ACR_LOGIN/liatrio-demo:latest"
+$IMAGE = "$ACR_LOGIN/aks-demo:latest"
 (Get-Content kubernetes/deployment.yaml) `
-  -replace 'REPLACE_WITH_ACR_LOGIN/liatrio-demo:latest', $IMAGE `
+  -replace 'REPLACE_WITH_ACR_LOGIN/aks-demo:latest', $IMAGE `
   | kubectl apply -f -
 
 # 7. Wait for deployment
-kubectl rollout status deployment/liatrio-demo --timeout=300s
+kubectl rollout status deployment/aks-demo --timeout=300s
 
 # 8. Get LoadBalancer IP
-kubectl get svc liatrio-demo-svc
+kubectl get svc aks-demo-svc
 ```
 
 ## Testing
@@ -206,7 +249,7 @@ pytest -v
 
 ```powershell
 # Get service IP
-$IP = kubectl get svc liatrio-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+$IP = kubectl get svc aks-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
 # Test main endpoint
 curl "http://$IP/"
@@ -454,19 +497,19 @@ Consider these additional security measures for production deployments:
 **Backend Configuration**: Azure Storage with remote state
 
 **State File Strategy**: Environment-specific state files
-- Production: `liatrio-demo-prod.tfstate`
-- Development: `liatrio-demo-dev.tfstate`
+- Production: `aks-demo-prod.tfstate`
+- Development: `aks-demo-dev.tfstate`
 
 **How it works:**
 The CI/CD pipeline dynamically determines the state file based on the environment:
-- `main` branch deployments use `liatrio-demo-prod.tfstate`
-- `dev` branch deployments use `liatrio-demo-dev.tfstate`
+- `main` branch deployments use `aks-demo-prod.tfstate`
+- `dev` branch deployments use `aks-demo-dev.tfstate`
 - Manual workflow dispatch allows selecting the environment
 
 This is configured via the `TF_BACKEND_KEY` environment variable in [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml#L102):
 
 ```yaml
-echo "TF_BACKEND_KEY=liatrio-demo-$ENV.tfstate" >> $GITHUB_ENV
+echo "TF_BACKEND_KEY=aks-demo-$ENV.tfstate" >> $GITHUB_ENV
 ```
 
 **Backend Storage:**
@@ -548,7 +591,7 @@ VPA is enabled to automatically optimize pod resource requests and limits based 
 - **Resource Limits**:
   - Min: 50m CPU, 64Mi memory
   - Max: 1000m CPU (1 core), 1Gi memory
-- **Target**: liatrio-demo deployment
+- **Target**: aks-demo deployment
 
 **Benefits:**
 - Reduces over-provisioning and infrastructure waste
@@ -559,10 +602,10 @@ VPA is enabled to automatically optimize pod resource requests and limits based 
 **Monitoring VPA:**
 ```bash
 # View VPA recommendations
-kubectl describe vpa liatrio-demo-vpa
+kubectl describe vpa aks-demo-vpa
 
 # Check current pod resources
-kubectl top pods -l app=liatrio-demo
+kubectl top pods -l app=aks-demo
 ```
 
 ### Application
@@ -681,7 +724,7 @@ This will remove:
 │  │  - Free control plane               │    │
 │  │                                     │    │
 │  │  ┌───────────────────────────────┐  │    │
-│  │  │  Deployment: liatrio-demo     │  │    │
+│  │  │  Deployment: aks-demo     │  │    │
 │  │  │  - Replicas: 2                │  │    │
 │  │  │  - Image: FastAPI app         │  │    │
 │  │  │  - CPU: 100m-200m             │  │    │
@@ -795,7 +838,7 @@ kubectl describe pod <pod-name>
 **Issue**: LoadBalancer IP not assigned
 ```powershell
 # Check service status
-kubectl describe svc liatrio-demo-svc
+kubectl describe svc aks-demo-svc
 
 # Verify Azure subscription quotas
 az network public-ip list --resource-group <node-resource-group>
@@ -807,13 +850,13 @@ kubectl get events --sort-by='.lastTimestamp'
 **Issue**: Pods not starting (CrashLoopBackOff)
 ```powershell
 # Check pod logs
-kubectl logs -l app=liatrio-demo --tail=50
+kubectl logs -l app=aks-demo --tail=50
 
 # Check resource usage
 kubectl describe pod <pod-name>
 
 # Verify image manifest
-az acr manifest show --name liatrio-demo:latest --registry <acr-name>
+az acr manifest show --name aks-demo:latest --registry <acr-name>
 ```
 
 **Issue**: Terraform state locked
@@ -826,19 +869,19 @@ terraform force-unlock <lock-id>
 
 ```powershell
 # View all resources
-kubectl get all -l app=liatrio-demo
+kubectl get all -l app=aks-demo
 
 # Stream logs from all pods
-kubectl logs -l app=liatrio-demo -f
+kubectl logs -l app=aks-demo -f
 
 # Get detailed pod information
-kubectl describe deployment liatrio-demo
+kubectl describe deployment aks-demo
 
 # Check rollout status
-kubectl rollout status deployment/liatrio-demo
+kubectl rollout status deployment/aks-demo
 
 # Restart deployment
-kubectl rollout restart deployment/liatrio-demo
+kubectl rollout restart deployment/aks-demo
 
 # View Terraform outputs
 cd terraform
@@ -935,7 +978,7 @@ If you don't see these options, the workflow file may not have synced to `main` 
 ## Project Structure
 
 ```
-liatrio-demo/
+aks-demo/
 ├── .github/
 │   ├── dependabot.yml         # Automated dependency updates config
 │   └── workflows/
@@ -965,22 +1008,22 @@ liatrio-demo/
 
 ```powershell
 # Get the public IP
-$IP = kubectl get svc liatrio-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+$IP = kubectl get svc aks-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
 # Access your API
 Start-Process "http://$IP/"
 
 # View logs
-kubectl logs -l app=liatrio-demo --tail=50 -f
+kubectl logs -l app=aks-demo --tail=50 -f
 
 # Check pod status
-kubectl get pods -l app=liatrio-demo
+kubectl get pods -l app=aks-demo
 
 # Scale deployment
-kubectl scale deployment liatrio-demo --replicas=3
+kubectl scale deployment aks-demo --replicas=3
 
 # Update image
-kubectl set image deployment/liatrio-demo api=<new-image>
+kubectl set image deployment/aks-demo api=<new-image>
 ```
 
 ### Deployment Flow Summary

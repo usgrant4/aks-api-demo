@@ -7,6 +7,7 @@ on:
       - "app/**"
       - "Dockerfile"
       - "kubernetes/**"
+      - "helm/**"
       - "terraform/**"
       - ".github/workflows/ci-cd.yml"
   pull_request:
@@ -14,6 +15,7 @@ on:
       - "app/**"
       - "Dockerfile"
       - "kubernetes/**"
+      - "helm/**"
       - "terraform/**"
   workflow_dispatch:
     inputs:
@@ -36,7 +38,7 @@ on:
 
 env:
   TF_WORKING_DIR: terraform
-  APP_NAME: liatrio-demo
+  APP_NAME: aks-demo
   TF_BACKEND_RG: tfstate-rg
   TF_BACKEND_SA: tfstateugrantliatrio
   TF_BACKEND_CONTAINER: tfstate
@@ -107,7 +109,7 @@ jobs:
           fi
 
           echo "ENVIRONMENT=$ENV" >> $GITHUB_ENV
-          echo "TF_BACKEND_KEY=liatrio-demo-$ENV.tfstate" >> $GITHUB_ENV
+          echo "TF_BACKEND_KEY=aks-demo-$ENV.tfstate" >> $GITHUB_ENV
           echo "DEPLOY_ENV=$ENV" >> $GITHUB_OUTPUT
 
           if [ "$DESTROY_MODE" = "true" ]; then
@@ -451,6 +453,50 @@ jobs:
             echo "✅ Clean manifest - all platforms valid"
           fi
 
+      - name: Setup Helm
+        if: env.DESTROY_MODE != 'true'
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.16.3'
+
+      - name: Validate Helm chart
+        if: env.DESTROY_MODE != 'true'
+        run: |
+          # Determine values file based on environment
+          if [ "${{ env.ENVIRONMENT }}" == "prod" ]; then
+            VALUES_FILE="./helm/aks-demo/values-prod.yaml"
+          else
+            VALUES_FILE="./helm/aks-demo/values.yaml"
+          fi
+
+          echo "Using values file: $VALUES_FILE"
+
+          echo "Linting Helm chart..."
+          helm lint ./helm/aks-demo \
+            --values $VALUES_FILE
+
+          echo "Validating Helm chart with dry-run..."
+          helm install aks-demo ./helm/aks-demo \
+            --dry-run --debug \
+            --set image.registry=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }} \
+            --set image.tag=${{ github.sha }} \
+            --set environment=${{ env.ENVIRONMENT }} \
+            --values $VALUES_FILE \
+            --namespace aks-demo-${{ env.ENVIRONMENT }} \
+            > /tmp/helm-dry-run.yaml
+
+          echo "✓ Helm chart validation passed"
+
+          echo "Rendering templates for inspection..."
+          helm template aks-demo ./helm/aks-demo \
+            --set image.registry=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }} \
+            --set image.tag=${{ github.sha }} \
+            --set environment=${{ env.ENVIRONMENT }} \
+            --values $VALUES_FILE \
+            > /tmp/helm-rendered.yaml
+
+          echo "✓ Helm templates rendered successfully"
+
       - name: ACR login for Trivy scan
         if: env.DESTROY_MODE != 'true'
         run: |
@@ -483,122 +529,167 @@ jobs:
           sarif_file: 'trivy-results.sarif'
           category: 'container-scan'
 
-      - name: Save current deployment for rollback
+      - name: Check existing Helm release
         if: env.DESTROY_MODE != 'true'
-        id: save_deployment
+        id: check_release
         continue-on-error: true
         run: |
-          if kubectl get deployment liatrio-demo &>/dev/null; then
-            echo "Saving current deployment state..."
-            kubectl get deployment liatrio-demo -o yaml > /tmp/previous-deployment.yaml
-            echo "PREVIOUS_DEPLOYMENT_EXISTS=true" >> $GITHUB_OUTPUT
+          NAMESPACE="aks-demo-${{ env.ENVIRONMENT }}"
 
-            # Check current health
-            READY=$(kubectl get deploy liatrio-demo -o jsonpath='{.status.readyReplicas}' || echo "0")
-            DESIRED=$(kubectl get deploy liatrio-demo -o jsonpath='{.spec.replicas}' || echo "0")
+          # Create namespace if it doesn't exist
+          kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-            if [ "$READY" != "$DESIRED" ]; then
-              echo "WARNING: Current deployment is unhealthy ($READY/$DESIRED ready)"
-              kubectl get pods -l app=liatrio-demo
-            else
-              echo "✓ Current deployment is healthy ($READY/$DESIRED ready)"
-            fi
+          if helm list -n $NAMESPACE | grep -q "aks-demo"; then
+            echo "Existing Helm release found"
+            echo "RELEASE_EXISTS=true" >> $GITHUB_OUTPUT
+
+            # Get current release info
+            helm status aks-demo -n $NAMESPACE
+
+            # Save current revision for potential rollback
+            CURRENT_REVISION=$(helm list -n $NAMESPACE -o json | jq -r '.[] | select(.name=="aks-demo") | .revision')
+            echo "CURRENT_REVISION=$CURRENT_REVISION" >> $GITHUB_OUTPUT
+            echo "Current revision: $CURRENT_REVISION"
           else
-            echo "No existing deployment found (initial deployment)"
-            echo "PREVIOUS_DEPLOYMENT_EXISTS=false" >> $GITHUB_OUTPUT
+            echo "No existing Helm release found (initial deployment)"
+            echo "RELEASE_EXISTS=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Deploy manifests
+      - name: Deploy with Helm
         if: env.DESTROY_MODE != 'true'
-        id: deploy
+        id: helm_deploy
         run: |
+          NAMESPACE="aks-demo-${{ env.ENVIRONMENT }}"
           ACR=${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}
           IMAGE_TAG=${{ steps.acr_build.outputs.IMAGE_TAG }}
 
-          # Use versioned tag for deployment
-          sed "s#REPLACE_WITH_ACR_LOGIN/liatrio-demo:latest#$ACR/${{ env.APP_NAME }}:$IMAGE_TAG#" \
-            kubernetes/deployment.yaml | kubectl apply -f -
-
-          # Deploy VPA for automatic resource rightsizing
-          echo "Deploying Vertical Pod Autoscaler..."
-          kubectl apply -f kubernetes/vpa.yaml
-
-      - name: Wait for rollout
-        if: env.DESTROY_MODE != 'true'
-        id: rollout
-        run: |
-          echo "Waiting for deployment rollout..."
-          if ! kubectl rollout status deploy/liatrio-demo --timeout=300s; then
-            echo "ERROR: Deployment rollout failed"
-
-            # Attempt rollback if previous deployment exists
-            if [ -f /tmp/previous-deployment.yaml ]; then
-              echo "Attempting to rollback to previous deployment..."
-              kubectl apply -f /tmp/previous-deployment.yaml
-              echo "Waiting for rollback to complete..."
-              kubectl rollout status deploy/liatrio-demo --timeout=120s || true
-            fi
-
-            exit 1
+          # Determine values file based on environment
+          if [ "${{ env.ENVIRONMENT }}" == "prod" ]; then
+            VALUES_FILE="./helm/aks-demo/values-prod.yaml"
+          else
+            VALUES_FILE="./helm/aks-demo/values.yaml"
           fi
-          echo "✓ Deployment rollout completed successfully"
 
-      - name: Verify pod readiness
+          echo "Deploying AKS Demo with Helm..."
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "Namespace: $NAMESPACE"
+          echo "Image: $ACR/${{ env.APP_NAME }}:$IMAGE_TAG"
+          echo "Values file: $VALUES_FILE"
+
+          helm upgrade --install aks-demo ./helm/aks-demo \
+            --set image.registry=$ACR \
+            --set image.tag=$IMAGE_TAG \
+            --set environment=${{ env.ENVIRONMENT }} \
+            --values $VALUES_FILE \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --wait \
+            --timeout 5m \
+            --atomic \
+            --cleanup-on-fail
+
+          NEW_REVISION=$(helm list -n $NAMESPACE -o json | jq -r '.[] | select(.name=="aks-demo") | .revision')
+          echo "NEW_REVISION=$NEW_REVISION" >> $GITHUB_OUTPUT
+          echo "✓ Deployment completed successfully (revision $NEW_REVISION)"
+
+      - name: Verify Helm deployment
         if: env.DESTROY_MODE != 'true'
         run: |
+          NAMESPACE="aks-demo-${{ env.ENVIRONMENT }}"
+
+          echo "Verifying Helm release status..."
+          helm status aks-demo -n $NAMESPACE
+
           echo "Verifying all pods are ready..."
+          DEPLOYMENT_NAME=$(kubectl get deployment -n $NAMESPACE -l app.kubernetes.io/name=aks-demo -o jsonpath='{.items[0].metadata.name}')
 
           # Get replica count from deployment
-          DESIRED=$(kubectl get deploy liatrio-demo -o jsonpath='{.spec.replicas}')
-          READY=$(kubectl get deploy liatrio-demo -o jsonpath='{.status.readyReplicas}')
+          DESIRED=$(kubectl get deploy $DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.spec.replicas}')
+          READY=$(kubectl get deploy $DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.status.readyReplicas}')
 
           if [ "$READY" != "$DESIRED" ]; then
             echo "ERROR: Expected $DESIRED ready pods, got $READY"
-            kubectl get pods -l app=liatrio-demo
-            kubectl describe pods -l app=liatrio-demo
-            kubectl logs -l app=liatrio-demo --tail=50
+            kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=aks-demo
+            kubectl describe pods -n $NAMESPACE -l app.kubernetes.io/name=aks-demo
+            kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=aks-demo --tail=50
             exit 1
           fi
 
           echo "✓ All $READY/$DESIRED pods ready"
-          kubectl get pods -l app=liatrio-demo
+          kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=aks-demo
+
+          echo "Verifying resources deployed by Helm..."
+          kubectl get all,vpa,pdb -n $NAMESPACE -l app.kubernetes.io/instance=aks-demo
+
+      - name: Test Helm rollback capability
+        if: env.DESTROY_MODE != 'true' && steps.check_release.outputs.RELEASE_EXISTS == 'true'
+        continue-on-error: true
+        run: |
+          NAMESPACE="aks-demo-${{ env.ENVIRONMENT }}"
+
+          echo "Testing rollback capability (dry-run)..."
+          helm rollback aks-demo ${{ steps.check_release.outputs.CURRENT_REVISION }} \
+            -n $NAMESPACE \
+            --dry-run
+
+          echo "✓ Rollback capability verified"
 
       - name: Smoke test
         if: env.DESTROY_MODE != 'true'
         run: |
+          NAMESPACE="aks-demo-${{ env.ENVIRONMENT }}"
+
           echo "Waiting for LoadBalancer IP..."
+          SVC_NAME=$(kubectl get svc -n $NAMESPACE -l app.kubernetes.io/name=aks-demo -o jsonpath='{.items[0].metadata.name}')
+
           for i in $(seq 1 30); do
-            SVC="liatrio-demo-svc"
-            IP=$(kubectl get svc $SVC \
+            IP=$(kubectl get svc $SVC_NAME -n $NAMESPACE \
               -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
             if [ -n "$IP" ]; then
               echo "✅ Service IP assigned: $IP"
               echo "Waiting 5s for service to be ready..."
               sleep 5
 
+              echo "Testing main endpoint..."
               if curl -sS -f http://$IP/ \
                   --connect-timeout 10 \
                   --retry 3 \
                   --retry-delay 2; then
                 echo ""
-                echo "=========================================="
-                echo "  ✅ DEPLOYMENT SUCCESSFUL!"
-                echo "=========================================="
-                echo ""
-                echo "API Endpoint: http://$IP/"
-                echo "Health Check: http://$IP/health"
-                echo "Version: v1.0.${{ github.sha }}"
-                exit 0
-              else
-                echo "⚠️ API not responding"
-                kubectl get pods -l app=liatrio-demo
-                kubectl logs -l app=liatrio-demo --tail=20
-                exit 1
+
+                echo "Testing health endpoint..."
+                if curl -sS -f http://$IP/health \
+                    --connect-timeout 10 \
+                    --retry 3 \
+                    --retry-delay 2; then
+                  echo ""
+                  echo "=========================================="
+                  echo "  ✅ HELM DEPLOYMENT SUCCESSFUL!"
+                  echo "=========================================="
+                  echo ""
+                  echo "Environment: ${{ env.ENVIRONMENT }}"
+                  echo "Namespace: $NAMESPACE"
+                  echo "API Endpoint: http://$IP/"
+                  echo "Health Check: http://$IP/health"
+                  echo "Image Tag: ${{ steps.acr_build.outputs.IMAGE_TAG }}"
+                  echo "Helm Revision: ${{ steps.helm_deploy.outputs.NEW_REVISION }}"
+                  echo ""
+                  echo "Helm Commands:"
+                  echo "  Status: helm status aks-demo -n $NAMESPACE"
+                  echo "  History: helm history aks-demo -n $NAMESPACE"
+                  echo "  Rollback: helm rollback aks-demo [REVISION] -n $NAMESPACE"
+                  exit 0
+                fi
               fi
+
+              echo "⚠️ API not responding"
+              kubectl get pods -n $NAMESPACE -l app.kubernetes.io/name=aks-demo
+              kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=aks-demo --tail=20
+              exit 1
             fi
             echo "⏳ Waiting for IP (attempt $i/30)..."
             sleep 10
           done
           echo "✗ LoadBalancer IP not assigned"
-          kubectl describe svc liatrio-demo-svc
+          kubectl describe svc $SVC_NAME -n $NAMESPACE
           exit 1

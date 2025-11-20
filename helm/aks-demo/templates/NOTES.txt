@@ -1,0 +1,83 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release "{{ .Release.Name }}" has been deployed to namespace "{{ .Release.Namespace }}".
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
+  $ helm get all {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+---
+
+APPLICATION DETAILS:
+  Environment: {{ .Values.environment }}
+  Replicas: {{ .Values.replicaCount }}
+  Image: {{ include "aks-demo.image" . }}
+
+---
+
+SERVICE INFORMATION:
+
+{{- if eq .Values.service.type "LoadBalancer" }}
+1. Get the external IP address:
+
+   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+
+   You can watch the status by running:
+
+   $ kubectl get svc {{ include "aks-demo.fullname" . }} -n {{ .Release.Namespace }} --watch
+
+   Once available, get the IP:
+
+   $ export SERVICE_IP=$(kubectl get svc {{ include "aks-demo.fullname" . }} -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+   $ echo "Application URL: http://$SERVICE_IP:{{ .Values.service.port }}"
+
+2. Test the application:
+
+   $ curl http://$SERVICE_IP:{{ .Values.service.port }}/
+   $ curl http://$SERVICE_IP:{{ .Values.service.port }}/health
+
+{{- else if eq .Values.service.type "ClusterIP" }}
+1. Access the application within the cluster:
+
+   $ kubectl run -i --tty --rm debug --image=curlimages/curl --restart=Never -- sh
+   $ curl http://{{ include "aks-demo.fullname" . }}:{{ .Values.service.port }}/
+
+2. Or use port-forward to access from your local machine:
+
+   $ kubectl port-forward svc/{{ include "aks-demo.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+   $ curl http://localhost:8080/
+{{- end }}
+
+---
+
+MONITORING:
+
+1. Check pod status:
+   $ kubectl get pods -l app.kubernetes.io/name={{ include "aks-demo.name" . }} -n {{ .Release.Namespace }}
+
+2. View logs:
+   $ kubectl logs -l app.kubernetes.io/name={{ include "aks-demo.name" . }} -n {{ .Release.Namespace }} -f
+
+3. Check VPA recommendations:
+   $ kubectl describe vpa {{ include "aks-demo.fullname" . }} -n {{ .Release.Namespace }}
+
+---
+
+UPGRADE:
+
+To upgrade this release with new values:
+
+  $ helm upgrade {{ .Release.Name }} ./helm/aks-demo \
+      --set image.tag=NEW_TAG \
+      --values ./helm/aks-demo/values-{{ .Values.environment }}.yaml
+
+ROLLBACK:
+
+To rollback to a previous version:
+
+  $ helm rollback {{ .Release.Name }} [REVISION] -n {{ .Release.Namespace }}
+
+---
+
+For more information, visit: https://github.com/usgrant4/aks-api-demo

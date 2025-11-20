@@ -1,6 +1,6 @@
 # Developer Guide: Getting Started
 
-This guide will help you as a dev get set up and start deploying to the liatrio-demo project in minutes.
+This guide will help you as a dev get set up and start deploying to the aks-demo project in minutes.
 
 ## Table of Contents
 
@@ -41,8 +41,8 @@ You need these installed on your machine:
 
 ```bash
 # Clone the repo
-git clone https://github.com/<your-org>/liatrio-demo.git
-cd liatrio-demo
+git clone https://github.com/<your-org>/aks-demo.git
+cd aks-demo
 
 # Checkout the dev branch (where you'll work)
 git checkout dev
@@ -123,7 +123,7 @@ git push origin dev
 After pushing, watch the deployment:
 
 1. **GitHub Actions Tab**
-   - Go to: `https://github.com/<your-org>/liatrio-demo/actions`
+   - Go to: `https://github.com/<your-org>/aks-demo/actions`
    - Click on your commit message
    - Watch the pipeline run in real-time
 
@@ -165,8 +165,8 @@ After the CI/CD pipeline deploys:
 ```bash
 # Get the LoadBalancer IP from the GitHub Actions logs
 # Or use Azure CLI (if you have it installed):
-az aks get-credentials -g ugrant-liatrio-demo-dev-rg -n ugrant-liatrio-demo-dev-aks
-kubectl get svc liatrio-demo-svc
+az aks get-credentials -g ugrant-aks-demo-dev-rg -n ugrant-aks-demo-dev-aks
+kubectl get svc aks-demo-svc
 
 # Test the deployed app
 DEV_IP="<your-loadbalancer-ip>"
@@ -174,10 +174,10 @@ curl http://$DEV_IP/
 curl http://$DEV_IP/health
 
 # Check pod logs
-kubectl logs -l app=liatrio-demo --tail=50
+kubectl logs -l app=aks-demo --tail=50
 
 # Check pod status
-kubectl get pods -l app=liatrio-demo
+kubectl get pods -l app=aks-demo
 ```
 
 ## Deploying to Production
@@ -190,7 +190,7 @@ git checkout dev
 git pull origin dev
 
 # 2. Create a Pull Request in GitHub UI
-# Go to: https://github.com/<your-org>/liatrio-demo
+# Go to: https://github.com/<your-org>/aks-demo
 # Click: "Pull requests" → "New pull request"
 # Base: main ← Compare: dev
 # Fill out description
@@ -309,7 +309,7 @@ pytest -v
 
 ```bash
 # If you have kubectl configured:
-kubectl logs -l app=liatrio-demo --tail=100 -f
+kubectl logs -l app=aks-demo --tail=100 -f
 
 # Or view logs in Azure Portal:
 # 1. Go to portal.azure.com
@@ -322,13 +322,13 @@ kubectl logs -l app=liatrio-demo --tail=100 -f
 
 ```bash
 # Check pods
-kubectl get pods -l app=liatrio-demo
+kubectl get pods -l app=aks-demo
 
 # Check service
-kubectl get svc liatrio-demo-svc
+kubectl get svc aks-demo-svc
 
 # Check deployment
-kubectl get deployment liatrio-demo
+kubectl get deployment aks-demo
 
 # Describe pod for details
 kubectl describe pod <pod-name>
@@ -368,7 +368,7 @@ pip install -r app/requirements.txt
 
 # Problem: Import errors
 # Solution: Run pytest from project root, not app/ directory
-cd /path/to/liatrio-demo
+cd /path/to/aks-demo
 pytest -v
 ```
 
@@ -381,7 +381,7 @@ uvicorn app.main:app --reload --port 8000
 
 # Problem: Module not found
 # Solution: Ensure you're in the right directory
-cd /path/to/liatrio-demo
+cd /path/to/aks-demo
 python -m uvicorn app.main:app --reload
 ```
 
@@ -407,16 +407,16 @@ python -m uvicorn app.main:app --reload
 
 ```bash
 # 1. Check pod status
-kubectl get pods -l app=liatrio-demo
+kubectl get pods -l app=aks-demo
 
 # 2. Check pod logs
-kubectl logs -l app=liatrio-demo --tail=50
+kubectl logs -l app=aks-demo --tail=50
 
 # 3. Describe pod for events
 kubectl describe pod <pod-name>
 
 # 4. Check if service has IP
-kubectl get svc liatrio-demo-svc
+kubectl get svc aks-demo-svc
 
 # Common issues:
 # - ImagePullBackOff: Docker image not in registry
@@ -428,7 +428,7 @@ kubectl get svc liatrio-demo-svc
 
 ```bash
 # 1. Get the LoadBalancer IP
-kubectl get svc liatrio-demo-svc
+kubectl get svc aks-demo-svc
 
 # 2. Verify it's assigned
 # Status should show EXTERNAL-IP (not <pending>)
@@ -481,15 +481,15 @@ curl http://localhost:8080/
 pytest -v
 
 # Check deployment status (requires kubectl)
-kubectl get pods -l app=liatrio-demo
-kubectl get svc liatrio-demo-svc
-kubectl logs -l app=liatrio-demo --tail=50
+kubectl get pods -l app=aks-demo
+kubectl get svc aks-demo-svc
+kubectl logs -l app=aks-demo --tail=50
 ```
 
 ### Important URLs
 
-- **Repository**: `https://github.com/<your-org>/liatrio-demo`
-- **GitHub Actions**: `https://github.com/<your-org>/liatrio-demo/actions`
+- **Repository**: `https://github.com/<your-org>/aks-demo`
+- **GitHub Actions**: `https://github.com/<your-org>/aks-demo/actions`
 - **Azure Portal**: `https://portal.azure.com`
 
 ### Getting Help

@@ -2,13 +2,13 @@
 set -e
 
 echo "=========================================="
-echo "  Liatrio Demo - Complete Cleanup"
+echo "  AKS Demo - Complete Cleanup"
 echo "=========================================="
 echo ""
 
 # Step 1: Get Terraform outputs before destroying
 echo "1️⃣ Gathering resource information..."
-cd ~/repos/liatrio-demo/terraform
+cd ~/repos/aks-demo/terraform
 
 if [ -f "terraform.tfstate" ]; then
     RG=$(terraform output -raw resource_group_name 2>/dev/null || echo "")
@@ -99,7 +99,7 @@ echo ""
 
 # Step 5: Clean up Terraform state
 echo "5️⃣ Cleaning up Terraform state files..."
-cd ~/repos/liatrio-demo/terraform
+cd ~/repos/aks-demo/terraform
 
 for file in terraform.tfstate terraform.tfstate.backup .terraform.lock.hcl; do
     if [ -f "$file" ]; then

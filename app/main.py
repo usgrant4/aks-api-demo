@@ -18,9 +18,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Liatrio Demo API",
+    title="AKS Demo API",
     version="1.0.0",
-    description="DevOps demonstration API",
+    description="DevOps demonstration API on Azure Kubernetes Service",
     lifespan=lifespan
 )
 

@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "╔═══════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║   Liatrio Demo - Fresh Deployment               ║" -ForegroundColor Cyan
+Write-Host "║   AKS Demo - Fresh Deployment               ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
@@ -9,7 +9,7 @@ $startTime = Get-Date
 
 # Step 1: Deploy Infrastructure
 Write-Host "1️⃣ Deploying Azure Infrastructure..." -ForegroundColor Yellow
-cd ~/repos/liatrio-demo/terraform
+cd ~/repos/aks-demo/terraform
 
 if (-not (Test-Path "terraform.tfstate")) {
     terraform init
@@ -48,7 +48,7 @@ Start-Sleep -Seconds 60
 Write-Host ""
 
 # Step 4: Build Image
-cd ~/repos/liatrio-demo
+cd ~/repos/aks-demo
 
 Write-Host "4️⃣ Building Docker image with ACR Tasks..." -ForegroundColor Yellow
 $GIT_SHA = (git rev-parse --short HEAD 2>$null)
@@ -61,8 +61,8 @@ Write-Host "   Version: $VERSION"
 
 az acr build `
     --registry $ACR_NAME `
-    --image "liatrio-demo:$VERSION" `
-    --image "liatrio-demo:latest" `
+    --image "aks-demo:$VERSION" `
+    --image "aks-demo:latest" `
     --platform linux/amd64 `
     --file Dockerfile `
     . `
@@ -74,7 +74,7 @@ Write-Host ""
 # Step 5: Verify Image
 Write-Host "5️⃣ Verifying image platform..." -ForegroundColor Yellow
 $manifest = az acr manifest show `
-    --name "liatrio-demo:$VERSION" `
+    --name "aks-demo:$VERSION" `
     --registry $ACR_NAME `
     -o json | ConvertFrom-Json
 
@@ -91,11 +91,11 @@ Write-Host ""
 
 # Step 6: Deploy to Kubernetes (WITHOUT digest pinning - simpler and more reliable)
 Write-Host "6️⃣ Deploying to Kubernetes..." -ForegroundColor Yellow
-$IMAGE = "$ACR_LOGIN/liatrio-demo:$VERSION"
+$IMAGE = "$ACR_LOGIN/aks-demo:$VERSION"
 Write-Host "   Image: $IMAGE"
 
 $deploymentContent = Get-Content kubernetes/deployment.yaml -Raw
-$deploymentContent = $deploymentContent -replace 'image: REPLACE_WITH_ACR_LOGIN/liatrio-demo:latest', "image: $IMAGE"
+$deploymentContent = $deploymentContent -replace 'image: REPLACE_WITH_ACR_LOGIN/aks-demo:latest', "image: $IMAGE"
 
 $deploymentContent | Out-File -FilePath temp_deployment.yaml -Encoding UTF8
 
@@ -103,7 +103,7 @@ kubectl apply -f temp_deployment.yaml
 Remove-Item temp_deployment.yaml
 
 Write-Host "   ⏳ Waiting for rollout..."
-kubectl rollout status deployment/liatrio-demo --timeout=300s
+kubectl rollout status deployment/aks-demo --timeout=300s
 
 Write-Host "   ✅ Deployed" -ForegroundColor Green
 Write-Host ""
@@ -111,7 +111,7 @@ Write-Host ""
 # Step 7: Wait for Pods
 Write-Host "7️⃣ Waiting for pods to be ready..." -ForegroundColor Yellow
 for ($i = 1; $i -le 30; $i++) {
-    $pods = kubectl get pods -l app=liatrio-demo -o json | ConvertFrom-Json
+    $pods = kubectl get pods -l app=aks-demo -o json | ConvertFrom-Json
     $readyPods = $pods.items | Where-Object {
         $_.status.phase -eq "Running" -and
         ($_.status.conditions | Where-Object { $_.type -eq "Ready" -and $_.status -eq "True" })
@@ -135,7 +135,7 @@ for ($i = 1; $i -le 30; $i++) {
     if ($failedCount -gt 0 -and $i -gt 10) {
         Write-Host "   ⚠️ Pods failing:" -ForegroundColor Yellow
         kubectl describe pod ($failedPods[0].metadata.name) | Select-String -Pattern "Events:" -Context 0, 10
-        kubectl get pods -l app=liatrio-demo
+        kubectl get pods -l app=aks-demo
         exit 1
     }
 
@@ -144,17 +144,17 @@ for ($i = 1; $i -le 30; $i++) {
 
 if ($readyCount -ne 2) {
     Write-Host "   ⚠️ Pods not ready" -ForegroundColor Yellow
-    kubectl get pods -l app=liatrio-demo
+    kubectl get pods -l app=aks-demo
     exit 1
 }
 
-kubectl get pods -l app=liatrio-demo
+kubectl get pods -l app=aks-demo
 Write-Host ""
 
 # Step 8: Get LoadBalancer IP
 Write-Host "8️⃣ Getting LoadBalancer IP..." -ForegroundColor Yellow
 for ($i = 1; $i -le 30; $i++) {
-    $IP = kubectl get svc liatrio-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+    $IP = kubectl get svc aks-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
     if ($IP) {
         Write-Host "   ✅ IP assigned: $IP" -ForegroundColor Green
         break
@@ -165,7 +165,7 @@ for ($i = 1; $i -le 30; $i++) {
 
 if (-not $IP) {
     Write-Host "   ⚠️ LoadBalancer IP not assigned" -ForegroundColor Yellow
-    kubectl get svc liatrio-demo-svc
+    kubectl get svc aks-demo-svc
     exit 1
 }
 
@@ -193,15 +193,15 @@ try {
     Write-Host "   API Endpoint: http://$IP/" -ForegroundColor White
     Write-Host "   Health Check: http://$IP/health" -ForegroundColor White
     Write-Host "   Version: $VERSION" -ForegroundColor White
-    Write-Host "   Image: $ACR_LOGIN/liatrio-demo:$VERSION" -ForegroundColor White
+    Write-Host "   Image: $ACR_LOGIN/aks-demo:$VERSION" -ForegroundColor White
     Write-Host ""
     Write-Host "🧪 API Response:" -ForegroundColor Yellow
     $response | ConvertTo-Json
     Write-Host ""
     Write-Host "🎯 Next Steps:" -ForegroundColor Yellow
     Write-Host "   • Run tests: .\test_deployment.ps1"
-    Write-Host "   • View logs: kubectl logs -l app=liatrio-demo"
-    Write-Host "   • Check status: kubectl get all -l app=liatrio-demo"
+    Write-Host "   • View logs: kubectl logs -l app=aks-demo"
+    Write-Host "   • Check status: kubectl get all -l app=aks-demo"
     Write-Host "   • Cleanup when done: cd terraform && terraform destroy"
     Write-Host ""
 }
@@ -210,5 +210,5 @@ catch {
     Write-Host "   Error: $_"
     Write-Host ""
     Write-Host "   Try: curl http://$IP/"
-    Write-Host "   Logs: kubectl logs -l app=liatrio-demo"
+    Write-Host "   Logs: kubectl logs -l app=aks-demo"
 }

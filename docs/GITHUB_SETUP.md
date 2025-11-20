@@ -17,7 +17,7 @@ Follow these steps to set up Azure authentication for GitHub Actions:
 ### 1. Create an Azure AD App Registration
 
 ```bash
-az ad app create --display-name "github-actions-liatrio-demo"
+az ad app create --display-name "github-actions-aks-demo"
 ```
 
 Note the `appId` from the output - this is your `AZURE_CLIENT_ID`.
@@ -66,7 +66,7 @@ az account show --query tenantId -o tsv
 az account show --query id -o tsv
 
 # Client ID (from step 1)
-az ad app list --display-name "github-actions-liatrio-demo" --query [0].appId -o tsv
+az ad app list --display-name "github-actions-aks-demo" --query [0].appId -o tsv
 ```
 
 ## Adding Secrets to GitHub
@@ -127,7 +127,7 @@ terraform {
     resource_group_name  = "tfstate-rg"
     storage_account_name = "tfstateugrantliatrio"
     container_name       = "tfstate"
-    key                  = "liatrio-demo.tfstate"
+    key                  = "aks-demo.tfstate"
   }
 }
 ```
@@ -249,11 +249,11 @@ Check the **Actions** tab in your GitHub repository to monitor pipeline executio
 - No manual ACR authentication needed
 
 **Pod failures**
-- Check pod logs: `kubectl logs -l app=liatrio-demo`
+- Check pod logs: `kubectl logs -l app=aks-demo`
 - Describe pod: `kubectl describe pod <pod-name>`
 - Workflow shows detailed diagnostics on failure
 
 **LoadBalancer IP not assigned**
 - Can take 2-5 minutes on Azure
 - Workflow waits up to 5 minutes automatically
-- Check service status: `kubectl describe svc liatrio-demo-svc`
+- Check service status: `kubectl describe svc aks-demo-svc`

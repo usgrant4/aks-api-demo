@@ -1,0 +1,18 @@
+apiVersion: v2
+name: aks-demo
+description: A production-ready Helm chart for AKS Demo API on Azure Kubernetes Service
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - fastapi
+  - demo
+  - devops
+  - azure
+  - aks
+maintainers:
+  - name: usgrant4
+    email: usgrant4@users.noreply.github.com
+home: https://github.com/usgrant4/aks-api-demo
+sources:
+  - https://github.com/usgrant4/aks-api-demo

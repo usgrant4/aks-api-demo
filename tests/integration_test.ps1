@@ -1,4 +1,4 @@
-# Integration test suite for Liatrio Demo
+# Integration test suite for AKS Demo
 # PowerShell version for Windows compatibility
 
 $ErrorActionPreference = "Stop"
@@ -35,14 +35,14 @@ function Run-Test {
 
 # Main test suite
 Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "  Liatrio Demo Integration Test Suite" -ForegroundColor Cyan
+Write-Host "  AKS Demo Integration Test Suite" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Get service endpoint
 Log-Info "Retrieving service endpoint..."
 try {
-    $IP = kubectl get svc liatrio-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>$null
+    $IP = kubectl get svc aks-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>$null
     if ([string]::IsNullOrEmpty($IP)) {
         Log-Error "Service IP not found. Is the service deployed?"
         exit 1
@@ -137,7 +137,7 @@ try {
 # Test 6: Kubernetes pod health
 Run-Test "Kubernetes pod health check"
 try {
-    $pods = kubectl get pods -l app=liatrio-demo -o json | ConvertFrom-Json
+    $pods = kubectl get pods -l app=aks-demo -o json | ConvertFrom-Json
     $readyPods = ($pods.items | Where-Object {
         $_.status.conditions | Where-Object { $_.type -eq "Ready" -and $_.status -eq "True" }
     }).Count
@@ -147,7 +147,7 @@ try {
         Log-Success "All pods are healthy ($readyPods/$totalPods ready)"
     } else {
         Log-Error "Some pods are not healthy ($readyPods/$totalPods ready)"
-        kubectl get pods -l app=liatrio-demo
+        kubectl get pods -l app=aks-demo
     }
 } catch {
     Log-Error "Failed to check pod health: $_"
@@ -156,8 +156,8 @@ try {
 # Test 7: Service configuration
 Run-Test "Service configuration validation"
 try {
-    $svcType = kubectl get svc liatrio-demo-svc -o jsonpath='{.spec.type}'
-    $svcPort = kubectl get svc liatrio-demo-svc -o jsonpath='{.spec.ports[0].port}'
+    $svcType = kubectl get svc aks-demo-svc -o jsonpath='{.spec.type}'
+    $svcPort = kubectl get svc aks-demo-svc -o jsonpath='{.spec.ports[0].port}'
 
     if ($svcType -eq "LoadBalancer" -and $svcPort -eq "80") {
         Log-Success "Service is correctly configured"
