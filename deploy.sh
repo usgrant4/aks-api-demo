@@ -2,7 +2,7 @@
 set -e
 
 echo "=========================================="
-echo "  Liatrio Demo - Complete Deployment"
+echo "  AKS Demo - Complete Deployment"
 echo "=========================================="
 echo ""
 
@@ -28,7 +28,7 @@ echo "✅ All prerequisites met"
 echo ""
 
 # Navigate to project root
-cd ~/repos/liatrio-demo
+cd ~/repos/aks-demo
 
 # Get Terraform outputs
 echo "📦 Getting infrastructure details..."
@@ -45,11 +45,11 @@ echo ""
 
 # Build and push image
 echo "🐳 Building Docker image..."
-docker build -t $ACR_LOGIN/liatrio-demo:latest .
+docker build -t $ACR_LOGIN/aks-demo:latest .
 
 echo "📤 Pushing to ACR..."
 az acr login --name $ACR_NAME
-docker push $ACR_LOGIN/liatrio-demo:latest
+docker push $ACR_LOGIN/aks-demo:latest
 
 echo "✅ Image pushed to ACR"
 echo ""
@@ -60,7 +60,7 @@ sed "s#REPLACE_WITH_ACR_LOGIN#$ACR_LOGIN#" \
   kubernetes/deployment.yaml | kubectl apply -f -
 
 echo "⏳ Waiting for rollout..."
-kubectl rollout status deploy/liatrio-demo --timeout=180s
+kubectl rollout status deploy/aks-demo --timeout=180s
 
 echo "✅ Deployment complete"
 echo ""
@@ -68,7 +68,7 @@ echo ""
 # Wait for LoadBalancer
 echo "⏳ Waiting for LoadBalancer IP (2-5 minutes)..."
 for i in {1..30}; do
-  IP=$(kubectl get svc liatrio-demo-svc \
+  IP=$(kubectl get svc aks-demo-svc \
     -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
   if [ -n "$IP" ]; then
     echo ""
@@ -83,8 +83,8 @@ for i in {1..30}; do
     echo "  curl http://$IP/health"
     echo ""
     echo "Verify deployment:"
-    echo "  kubectl get pods -l app=liatrio-demo"
-    echo "  kubectl logs -l app=liatrio-demo --tail=20"
+    echo "  kubectl get pods -l app=aks-demo"
+    echo "  kubectl logs -l app=aks-demo --tail=20"
     echo ""
     exit 0
   fi
@@ -94,4 +94,4 @@ done
 
 echo ""
 echo "⚠️  LoadBalancer IP not ready yet"
-echo "Check status: kubectl get svc liatrio-demo-svc"
+echo "Check status: kubectl get svc aks-demo-svc"

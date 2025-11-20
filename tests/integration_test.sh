@@ -1,5 +1,5 @@
 #!/bin/bash
-# Integration test suite for Liatrio Demo
+# Integration test suite for AKS Demo
 # Tests the deployed application end-to-end
 
 set -eu
@@ -39,13 +39,13 @@ run_test() {
 # Main test suite
 main() {
     echo "=========================================="
-    echo "  Liatrio Demo Integration Test Suite"
+    echo "  AKS Demo Integration Test Suite"
     echo "=========================================="
     echo ""
 
     # Get service endpoint
     log_info "Retrieving service endpoint..."
-    IP=$(kubectl get svc liatrio-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    IP=$(kubectl get svc aks-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
 
     if [ -z "$IP" ]; then
         log_error "Service IP not found. Is the service deployed?"
@@ -123,20 +123,20 @@ main() {
 
     # Test 6: Kubernetes pod health
     run_test "Kubernetes pod health check"
-    READY_PODS=$(kubectl get pods -l app=liatrio-demo --field-selector=status.phase=Running -o json | jq '[.items[] | select(.status.conditions[] | select(.type=="Ready" and .status=="True"))] | length')
-    TOTAL_PODS=$(kubectl get pods -l app=liatrio-demo -o json | jq '.items | length')
+    READY_PODS=$(kubectl get pods -l app=aks-demo --field-selector=status.phase=Running -o json | jq '[.items[] | select(.status.conditions[] | select(.type=="Ready" and .status=="True"))] | length')
+    TOTAL_PODS=$(kubectl get pods -l app=aks-demo -o json | jq '.items | length')
 
     if [ "$READY_PODS" -ge 1 ] && [ "$READY_PODS" -eq "$TOTAL_PODS" ]; then
         log_success "All pods are healthy ($READY_PODS/$TOTAL_PODS ready)"
     else
         log_error "Some pods are not healthy ($READY_PODS/$TOTAL_PODS ready)"
-        kubectl get pods -l app=liatrio-demo
+        kubectl get pods -l app=aks-demo
     fi
 
     # Test 7: Service endpoint configuration
     run_test "Service configuration validation"
-    SVC_TYPE=$(kubectl get svc liatrio-demo-svc -o jsonpath='{.spec.type}')
-    SVC_PORT=$(kubectl get svc liatrio-demo-svc -o jsonpath='{.spec.ports[0].port}')
+    SVC_TYPE=$(kubectl get svc aks-demo-svc -o jsonpath='{.spec.type}')
+    SVC_PORT=$(kubectl get svc aks-demo-svc -o jsonpath='{.spec.ports[0].port}')
 
     if [ "$SVC_TYPE" = "LoadBalancer" ] && [ "$SVC_PORT" = "80" ]; then
         log_success "Service is correctly configured"
@@ -148,13 +148,13 @@ main() {
 
     # Test 8: High availability test (if multiple replicas)
     run_test "High availability test"
-    REPLICA_COUNT=$(kubectl get deployment liatrio-demo -o jsonpath='{.spec.replicas}')
+    REPLICA_COUNT=$(kubectl get deployment aks-demo -o jsonpath='{.spec.replicas}')
 
     if [ "$REPLICA_COUNT" -ge 2 ]; then
         log_info "Testing zero-downtime capability with $REPLICA_COUNT replicas"
 
         # Get one pod to delete
-        POD_TO_DELETE=$(kubectl get pod -l app=liatrio-demo -o jsonpath='{.items[0].metadata.name}')
+        POD_TO_DELETE=$(kubectl get pod -l app=aks-demo -o jsonpath='{.items[0].metadata.name}')
 
         # Start background requests
         log_info "  Deleting pod: $POD_TO_DELETE"

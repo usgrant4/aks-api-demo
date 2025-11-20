@@ -2,9 +2,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: liatrio-demo
+  name: aks-demo
   labels:
-    app: liatrio-demo
+    app: aks-demo
     version: v1
 spec:
   replicas: 2
@@ -15,11 +15,11 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: liatrio-demo
+      app: aks-demo
   template:
     metadata:
       labels:
-        app: liatrio-demo
+        app: aks-demo
         version: v1
     spec:
       securityContext:
@@ -31,7 +31,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          image: REPLACE_WITH_ACR_LOGIN/liatrio-demo:latest
+          image: REPLACE_WITH_ACR_LOGIN/aks-demo:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
@@ -87,13 +87,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: liatrio-demo-svc
+  name: aks-demo-svc
   labels:
-    app: liatrio-demo
+    app: aks-demo
 spec:
   type: LoadBalancer
   selector:
-    app: liatrio-demo
+    app: aks-demo
   ports:
     - name: http
       port: 80
@@ -104,9 +104,9 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: liatrio-demo-pdb
+  name: aks-demo-pdb
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app: liatrio-demo
+      app: aks-demo

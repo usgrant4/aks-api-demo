@@ -1,0 +1,107 @@
+# Production environment overrides for aks-demo
+# These values override the defaults in values.yaml
+
+environment: prod
+
+# Increase replicas for production
+replicaCount: 3
+
+# Image configuration - tag will be set in CI/CD
+image:
+  # Use specific tags in production, not 'latest'
+  tag: ""  # Will be set to commit SHA in CI/CD
+  pullPolicy: IfNotPresent
+
+# Production resource limits (increased)
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Stricter health checks for production
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Pod Disruption Budget - require more pods available
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Vertical Pod Autoscaler with higher limits for production
+vpa:
+  enabled: true
+  updateMode: "Auto"
+  minAllowed:
+    cpu: 100m
+    memory: 128Mi
+  maxAllowed:
+    cpu: 2000m
+    memory: 2Gi
+  controlledResources:
+    - cpu
+    - memory
+
+# Optional: Enable HPA for production if needed
+# hpa:
+#   enabled: true
+#   minReplicas: 3
+#   maxReplicas: 10
+#   targetCPUUtilizationPercentage: 70
+#   targetMemoryUtilizationPercentage: 80
+
+# Production-specific service annotations
+service:
+  type: LoadBalancer
+  annotations: {}
+    # Add production-specific annotations here if needed
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+
+# Optional: Enable ingress for production
+# ingress:
+#   enabled: true
+#   className: "nginx"
+#   annotations:
+#     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+#     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+#   hosts:
+#     - host: api.example.com
+#       paths:
+#         - path: /
+#           pathType: Prefix
+#   tls:
+#     - secretName: aks-demo-tls
+#       hosts:
+#         - api.example.com
+
+# Node affinity for production (optional)
+# affinity:
+#   podAntiAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#       - weight: 100
+#         podAffinityTerm:
+#           labelSelector:
+#             matchExpressions:
+#               - key: app
+#                 operator: In
+#                 values:
+#                   - aks-demo
+#           topologyKey: kubernetes.io/hostname

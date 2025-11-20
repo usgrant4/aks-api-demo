@@ -1,17 +1,17 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "╔═══════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║   Liatrio Demo - Test Suite                     ║" -ForegroundColor Cyan
+Write-Host "║   AKS Demo - Test Suite                     ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # Get service IP
 Write-Host "📍 Getting service endpoint..." -ForegroundColor Yellow
-$IP = kubectl get svc liatrio-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+$IP = kubectl get svc aks-demo-svc -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
 if (-not $IP) {
     Write-Host "❌ LoadBalancer IP not ready yet" -ForegroundColor Red
-    Write-Host "Run: kubectl get svc liatrio-demo-svc"
+    Write-Host "Run: kubectl get svc aks-demo-svc"
     exit 1
 }
 
@@ -170,7 +170,7 @@ Write-Host ""
 
 # Test 6: Pod Health
 Write-Host "Test 6: Pod Health" -ForegroundColor Yellow
-$pods = kubectl get pods -l app=liatrio-demo -o json | ConvertFrom-Json
+$pods = kubectl get pods -l app=aks-demo -o json | ConvertFrom-Json
 $readyPods = $pods.items | Where-Object {
     $_.status.phase -eq "Running" -and
     ($_.status.conditions | Where-Object { $_.type -eq "Ready" -and $_.status -eq "True" })
@@ -185,14 +185,14 @@ if ($readyCount -eq $totalPods -and $totalPods -ge 2) {
 }
 else {
     Write-Host "  ⚠️ Some pods not healthy" -ForegroundColor Yellow
-    kubectl get pods -l app=liatrio-demo
+    kubectl get pods -l app=aks-demo
     $testsFailed++
 }
 Write-Host ""
 
 # Test 7: Service Configuration
 Write-Host "Test 7: Service Configuration" -ForegroundColor Yellow
-$svc = kubectl get svc liatrio-demo-svc -o json | ConvertFrom-Json
+$svc = kubectl get svc aks-demo-svc -o json | ConvertFrom-Json
 $svcType = $svc.spec.type
 $svcPort = $svc.spec.ports[0].port
 
@@ -254,7 +254,7 @@ Write-Host "🌐 Your API: http://$IP/" -ForegroundColor Cyan
 Write-Host "🏥 Health Check: http://$IP/health" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "📊 Additional Commands:" -ForegroundColor Yellow
-Write-Host "  kubectl get all -l app=liatrio-demo" -ForegroundColor White
-Write-Host "  kubectl logs -l app=liatrio-demo --tail=50" -ForegroundColor White
-Write-Host "  kubectl describe svc liatrio-demo-svc" -ForegroundColor White
+Write-Host "  kubectl get all -l app=aks-demo" -ForegroundColor White
+Write-Host "  kubectl logs -l app=aks-demo --tail=50" -ForegroundColor White
+Write-Host "  kubectl describe svc aks-demo-svc" -ForegroundColor White
 Write-Host ""

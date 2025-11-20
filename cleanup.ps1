@@ -1,13 +1,13 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "╔═══════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║   Liatrio Demo - Complete Cleanup               ║" -ForegroundColor Cyan
+Write-Host "║   AKS Demo - Complete Cleanup               ║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
 # Step 1: Get Terraform outputs before destroying
 Write-Host "1️⃣ Gathering resource information..." -ForegroundColor Yellow
-cd ~/repos/liatrio-demo/terraform
+cd ~/repos/aks-demo/terraform
 
 if (Test-Path "terraform.tfstate") {
     $RG = terraform output -raw resource_group_name 2>$null
@@ -105,7 +105,7 @@ Write-Host ""
 
 # Step 5: Clean up Terraform state
 Write-Host "5️⃣ Cleaning up Terraform state files..." -ForegroundColor Yellow
-cd ~/repos/liatrio-demo/terraform
+cd ~/repos/aks-demo/terraform
 if (Test-Path "terraform.tfstate") {
     Remove-Item -Force terraform.tfstate
     Write-Host "   Deleted: terraform.tfstate" -ForegroundColor Gray
