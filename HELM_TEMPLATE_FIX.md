@@ -40,7 +40,7 @@ env:
 {{- end }}
 ```
 
-**After (Fixed):**
+**After (Fixed - Attempt 1 - STILL FAILED):**
 ```yaml
 {{- if .Values.env }}
 env:
@@ -48,8 +48,19 @@ env:
 {{- end }}
 ```
 
+**Problem:** In Helm/Go templates, empty arrays `[]` are still truthy!
+
+**After (Final Fix - CORRECT):**
+```yaml
+{{- if gt (len .Values.env) 0 }}
+env:
+  {{- toYaml .Values.env | nindent 12 }}
+{{- end }}
+```
+
 **Why This Works:**
-- `{{- if .Values.env }}` evaluates to `false` for empty arrays
+- `{{- if gt (len .Values.env) 0 }}` checks if array length is greater than 0
+- Empty arrays have length 0, so the condition evaluates to `false`
 - The entire `env:` block is omitted when the array is empty
 - When the array has items, it renders correctly
 
@@ -129,16 +140,22 @@ The GitHub Actions workflow will now pass the "Validate Helm chart" step:
 
 ## Related Helm Template Best Practices
 
-### Use `if` for Empty Arrays/Objects
+### Use Length Check for Empty Arrays
 
 ```yaml
-# ✅ CORRECT: Use if for conditional rendering
+# ✅ CORRECT: Check array length for conditional rendering
+{{- if gt (len .Values.env) 0 }}
+env:
+  {{- toYaml .Values.env | nindent 12 }}
+{{- end }}
+
+# ❌ WRONG: Empty arrays are truthy in Go templates
 {{- if .Values.env }}
 env:
   {{- toYaml .Values.env | nindent 12 }}
 {{- end }}
 
-# ❌ WRONG: with evaluates true for empty arrays
+# ❌ WRONG: with also evaluates true for empty arrays
 {{- with .Values.env }}
 env:
   {{- toYaml . | nindent 12 }}
@@ -159,13 +176,15 @@ annotations:
 
 | Construct | Behavior | Best For |
 |-----------|----------|----------|
-| `{{- if .Values.x }}` | Checks if value exists and is non-zero | Arrays, conditional blocks |
+| `{{- if gt (len .Values.x) 0 }}` | Checks if array/slice has elements | **Arrays/slices** (empty arrays are truthy!) |
+| `{{- if .Values.x }}` | Checks if value exists and is non-zero | Strings, numbers, booleans |
 | `{{- with .Values.x }}` | Sets context (`.`) to the value | Nested objects, avoiding repetition |
 
 ## Summary
 
 **Issue:** Empty array `env: []` caused YAML syntax error when rendered
-**Fix:** Changed `{{- with .Values.env }}` to `{{- if .Values.env }}`
-**Result:** Empty arrays are now skipped instead of rendered as invalid YAML
+**Root Cause:** In Go templates (which Helm uses), empty arrays/slices are considered "truthy"
+**Fix:** Changed to `{{- if gt (len .Values.env) 0 }}` to check array length
+**Result:** Empty arrays are now properly skipped instead of rendered as invalid YAML
 
 This fix ensures the Helm chart lints and deploys correctly for both dev and prod environments.
