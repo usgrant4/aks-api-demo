@@ -72,8 +72,8 @@ vpa:
 service:
   type: LoadBalancer
   annotations: {}
-# Add production-specific annotations here if needed
-# service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+  # Add production-specific annotations here if needed
+  # service.beta.kubernetes.io/azure-load-balancer-internal: "false"
 
 # Optional: Enable ingress for production
 # ingress:
