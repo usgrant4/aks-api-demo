@@ -43,7 +43,7 @@ spec:
               protocol: {{ .Values.service.protocol }}
           {{- if gt (len .Values.env) 0 }}
           env:
-            {{- toYaml .Values.env | nindent 12 }}
+{{- toYaml .Values.env | nindent 12 }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
