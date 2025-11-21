@@ -41,9 +41,11 @@ spec:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
               protocol: {{ .Values.service.protocol }}
-          {{- if gt (len .Values.env) 0 }}
+          {{- with .Values.env }}
+          {{- if gt (len .) 0 }}
           env:
-{{- toYaml .Values.env | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
