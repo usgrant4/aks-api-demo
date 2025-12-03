@@ -517,6 +517,9 @@ echo "TF_BACKEND_KEY=aks-demo-$ENV.tfstate" >> $GITHUB_ENV
 - Storage Account: `tfstateugrantliatrio`
 - Container: `tfstate`
 - Location: `westus2`
+- **Versioning**: ✅ Enabled (automatic state history and recovery)
+
+> **📖 State Versioning**: See [docs/TERRAFORM_STATE_VERSIONING.md](docs/TERRAFORM_STATE_VERSIONING.md) for complete documentation on state versioning, recovery procedures, and lifecycle management.
 
 **IMPORTANT: Do NOT Destroy the Terraform Backend**
 
