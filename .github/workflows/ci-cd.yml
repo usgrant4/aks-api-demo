@@ -504,7 +504,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         if: env.DESTROY_MODE != 'true'
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: '${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ steps.acr_build.outputs.IMAGE_TAG }}'
           format: 'table'
@@ -514,7 +514,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner (SARIF output)
         if: env.DESTROY_MODE != 'true'
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: '${{ steps.tfout.outputs.ACR_LOGIN_SERVER }}/${{ env.APP_NAME }}:${{ steps.acr_build.outputs.IMAGE_TAG }}'
           format: 'sarif'
