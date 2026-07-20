@@ -36,5 +36,5 @@ variable "node_vm_size" {
 variable "kubernetes_version" {
   description = "AKS Kubernetes version"
   type        = string
-  default     = "1.32.7"
+  default     = "1.34"
 }
